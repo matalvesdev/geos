@@ -51,9 +51,16 @@ docs/geos/
 | Knowledge: documents, chunking, FTS | SPEC-010 | `IMPLEMENTED` + `TESTED` |
 | CLI (`init`, `doctor`, `db migrate`, `knowledge`, `workflows`, `runs`) | SPEC-001/007/010 | `IMPLEMENTED` + `TESTED` |
 
-**Not yet implemented** (see `roadmaps/roadmap.md`): embeddings/vector retrieval, knowledge
-graph, agent runtime beyond primitives, approvals UI, research engine, content engine, lead
-intelligence, CRM, meetings, Academy, community, control center, external integrations.
+| CLI (`init`, `doctor`, `db migrate`, `knowledge`, `workflows`, `runs`) | SPEC-001/007/010 | `IMPLEMENTED` + `TESTED` |
+| Embeddings + vector store (hash provider, cache) | SPEC-011 | `IMPLEMENTED` + `TESTED` |
+| Hybrid RAG (FTS+vector+graph, pesos configuráveis) | SPEC-012 | `IMPLEMENTED` + `TESTED` |
+| Knowledge graph (extração determinística + CLI) | SPEC-013 | `IMPLEMENTED` + `TESTED` |
+| Memory (TTL, sensibilidade) | SPEC-014 | `IMPLEMENTED` + `TESTED` |
+| Research engine + vertical slice 1 (`content-factory`) | SPEC-021 | `IMPLEMENTED` + `TESTED` |
+
+**Not yet implemented** (see `roadmaps/roadmap.md`): embeddings treinados/providers reais,
+rerank model-based, agent runtime além de primitives, approvals UI, content engine completo,
+SEO, lead intelligence, CRM, meetings, Academy, community, control center, integrações externas.
 
 ## Development
 

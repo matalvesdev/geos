@@ -160,8 +160,72 @@ CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action);
 """
 
 
+V2_KNOWLEDGE_PHASE1 = """
+CREATE TABLE IF NOT EXISTS embeddings (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  content_hash TEXT NOT NULL,
+  document_id TEXT,
+  chunk_id TEXT UNIQUE,
+  dimension INTEGER NOT NULL,
+  vector TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  model TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_embeddings_chunk ON embeddings(chunk_id);
+CREATE INDEX IF NOT EXISTS idx_embeddings_hash ON embeddings(content_hash);
+
+CREATE TABLE IF NOT EXISTS memories (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  scope TEXT NOT NULL,
+  key TEXT NOT NULL,
+  value TEXT NOT NULL,
+  source TEXT,
+  confidence REAL,
+  sensitivity TEXT NOT NULL DEFAULT 'INTERNAL',
+  retention_seconds INTEGER,
+  created_at TEXT NOT NULL,
+  expires_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_scope_key ON memories(scope, key);
+
+CREATE TABLE IF NOT EXISTS research (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  question TEXT NOT NULL,
+  status TEXT NOT NULL,
+  plan TEXT,
+  sources TEXT,
+  extractions TEXT,
+  synthesis TEXT,
+  insights TEXT,
+  opportunities TEXT,
+  trace_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_research_created ON research(created_at);
+
+CREATE TABLE IF NOT EXISTS insights (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  research_id TEXT,
+  insight_type TEXT NOT NULL,
+  content TEXT NOT NULL,
+  evidence TEXT,
+  confidence REAL,
+  source TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_insights_type ON insights(insight_type);
+"""
+
+
 MIGRATIONS: list[tuple[int, str, str]] = [
     (1, "bootstrap", V1_BOOTSTRAP),
+    (2, "knowledge_phase1", V2_KNOWLEDGE_PHASE1),
 ]
 
 MAX_VERSION = max(v for v, _, _ in MIGRATIONS)

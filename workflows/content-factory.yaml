@@ -1,0 +1,48 @@
+# Vertical slice 1 (SPEC-021/022): Research → Knowledge → Brief → Draft → Social →
+# Aprovação (obrigatória) → Schedule. Tudo persistido em SQLite.
+# Rode: geos workflows run content-factory --approve publish
+#       geos workflows schedule content-factory   (se trigger tiver cron)
+workflow:
+  id: content-factory
+  description: "Vertical slice 1 — de research a conteúdo agendado com aprovação humana."
+  trigger:
+    kind: cron
+    cron: "0 7 * * 1"
+  steps:
+    - id: research
+      type: agent
+      agent: research.run
+      input:
+        question: "origem de crédito bancário"
+        sources_limit: 5
+    - id: knowledge
+      type: agent
+      agent: knowledge.search
+      input:
+        query: "$ref steps.research.question"
+        limit: 5
+    - id: brief
+      type: agent
+      agent: content.brief
+      input:
+        topic: "$ref steps.research.question"
+    - id: draft
+      type: agent
+      agent: content.draft
+      input:
+        topic: "$ref steps.brief.topic"
+    - id: social
+      type: agent
+      agent: social.draft
+      input:
+        title: "$ref steps.draft.title"
+    - id: publish
+      type: approval
+      approval:
+        mode: required
+    - id: schedule
+      type: task
+      task: schedule.record
+      input:
+        title: "$ref steps.draft.title"
+        platform: blog

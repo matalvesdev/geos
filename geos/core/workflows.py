@@ -19,6 +19,7 @@ import yaml
 from ..storage.database import Database
 from ..storage.repos import Event, RepoFactory
 from ..util import new_id, now_iso
+from .events import SqliteEventBus
 from .jobs import PermanentError, TransientError
 from .telemetry import Telemetry
 
@@ -487,12 +488,61 @@ def default_handlers(db: Database) -> dict[str, StepHandler]:
         # Record-only gate used as a task when explicit approval steps are not needed.
         return {"gated": True, "step": ctx.get("step")}
 
+    def handle_research_run(inputs: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
+        from ..domains.research import ResearchEngine
+
+        engine = ResearchEngine(db)
+        report = engine.run(
+            str(inputs.get("question", "")),
+            sources_limit=int(inputs.get("sources_limit", 5)),
+            trace_id=ctx.get("trace_id"),
+        )
+        return {
+            "research_id": report.id, "question": report.question,
+            "synthesis": report.synthesis, "sources_count": len(report.sources),
+            "insights": report.insights, "mock": report.mock,
+        }
+
+    def handle_content_brief(inputs: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
+        topic = str(inputs.get("topic", "undefined"))
+        return {
+            "topic": topic,
+            "audience": "financial operations practitioners",
+            "funnel_stage": "consideration",
+            "objective": "educate",
+            "outline": [
+                f"O problema: {topic}",
+                "Processo e evidência",
+                "Como aplicar na operação",
+                "Próximos passos",
+            ],
+            "cta": "Falar com especialista",
+            "hypothesis": f"Conteúdo sobre '{topic}' gera interesse mensurável (a validar)",
+            "mock": True,
+        }
+
+    def handle_schedule_record(inputs: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
+        from ..core.events import EventTypes
+
+        title = str(inputs.get("title", ""))
+        platform = str(inputs.get("platform", "blog"))
+        SqliteEventBus(db).publish(
+            EventTypes.CONTENT_SCHEDULED,
+            {"title": title, "platform": platform, "status": "SCHEDULED"},
+            trace_id=ctx.get("trace_id"),
+        )
+        return {"scheduled": True, "title": title, "platform": platform,
+                "status": "SCHEDULED", "scheduled_at": now_iso()}
+
     return {
         "echo": handle_echo,
         "knowledge.search": handle_knowledge_search,
         "research.summary": handle_research_summary,
+        "research.run": handle_research_run,
+        "content.brief": handle_content_brief,
         "content.draft": handle_content_draft,
         "social.draft": handle_social_draft,
         "brand.review": handle_brand_review,
         "approval.gate": handle_approval_gate,
+        "schedule.record": handle_schedule_record,
     }

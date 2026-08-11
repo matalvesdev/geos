@@ -11,6 +11,7 @@ from ..storage.database import Database
 from ..storage.repos import KnowledgeRepository
 from ..util import new_id
 from .chunking import chunk_markdown
+from .embeddings import HashEmbeddingProvider, SqliteVectorStore
 
 
 @dataclass
@@ -20,6 +21,7 @@ class IngestResult:
     updated: int = 0
     unchanged: int = 0
     chunks: int = 0
+    embeddings: int = 0
     errors: list[str] = field(default_factory=list)
 
 
@@ -29,12 +31,17 @@ def ingest_directory(
     source: str | None = None,
     recursive: bool = True,
     doc_type: str = "markdown",
+    embed: bool = True,
 ) -> IngestResult:
-    """Ingest *.md / *.txt files under root. Deterministic hash dedup per URI."""
+    """Ingest *.md / *.txt files under root. Deterministic hash dedup per URI.
+    When embed=True (default), chunk embeddings are computed once per content_hash
+    and stored in the SQLite vector store (SPEC-011/§17 cache).
+    """
     root = Path(root)
     if not root.is_dir():
         raise ValueError(f"ingest root is not a directory: {root}")
     repo = KnowledgeRepository(db)
+    vector_store = SqliteVectorStore(db, HashEmbeddingProvider()) if embed else None
     result = IngestResult()
     pattern = "**/*" if recursive else "*"
     files = sorted(
@@ -61,6 +68,16 @@ def ingest_directory(
                 chunk.chunk_id = new_id()
             repo.add_chunks(doc_id, [_chunk_row(c) for c in chunks])
             result.chunks += len(chunks)
+            if vector_store is not None:
+                if not created:
+                    vector_store.delete_by_document(doc_id)  # purge stale vectors
+                result.embeddings += vector_store.upsert(
+                    [
+                        {"chunk_id": c.chunk_id, "document_id": doc_id,
+                         "content_hash": _sha256(c.content), "content": c.content}
+                        for c in chunks
+                    ]
+                )
             if created:
                 result.added += 1
             else:
@@ -68,6 +85,24 @@ def ingest_directory(
         except Exception as exc:  # noqa: BLE001 - one bad file must not stop the ingest
             result.errors.append(f"{path}: {type(exc).__name__}: {exc}")
     return result
+
+
+def reindex_embeddings(db: Database) -> int:
+    """Rebuild embeddings for all ingested documents (SPEC-011). Idempotent."""
+    repo = KnowledgeRepository(db)
+    store = SqliteVectorStore(db, HashEmbeddingProvider())
+    total = 0
+    for doc in repo.list_documents():
+        store.delete_by_document(doc["id"])
+        chunks = repo.chunks_for_document(doc["id"])
+        total += store.upsert(
+            [
+                {"chunk_id": c["chunk_id"], "document_id": doc["id"],
+                 "content_hash": _sha256(c["content"]), "content": c["content"]}
+                for c in chunks
+            ]
+        )
+    return total
 
 
 def search(

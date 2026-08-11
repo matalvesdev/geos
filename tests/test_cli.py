@@ -106,6 +106,35 @@ class CliTests(unittest.TestCase):
             self.assertEqual(approvals.returncode, 0, approvals.stderr)
             self.assertIn("pending", approvals.stdout)
 
+    def test_phase1_cli_commands(self) -> None:
+        """graph extract/inspect + research run end-to-end (SPEC-013/021)."""
+        with TempDir() as tmp:
+            docs = tmp / "docs"
+            docs.mkdir()
+            (docs / "origem.md").write_text(
+                "# Origem de crédito\n\nA origem de crédito bancário exige evidência "
+                "documental para a decisão financeira. Azeetra e Zetra One endereçam a "
+                "conciliação bancária.\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(run_cli(tmp, "db", "migrate").returncode, 0)
+            ingest = run_cli(tmp, "knowledge", "ingest", str(docs), "--source", "test")
+            self.assertEqual(ingest.returncode, 0, ingest.stderr)
+            self.assertIn("embeddings=", ingest.stdout)
+            self.assertIn("embeddings=1", ingest.stdout)
+
+            g = run_cli(tmp, "graph", "extract")
+            self.assertEqual(g.returncode, 0, g.stderr)
+            self.assertIn("nodes=", g.stdout)
+            insp = run_cli(tmp, "graph", "inspect", "--type", "TOPIC")
+            self.assertEqual(insp.returncode, 0, insp.stderr)
+            self.assertIn("TOPIC nodes:", insp.stdout)
+
+            r = run_cli(tmp, "research", "run", "origem de crédito")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("sources (", r.stdout)
+            self.assertIn("OBSERVATION", r.stdout)
+
     def test_plan_experimental(self) -> None:
         with TempDir() as tmp:
             (tmp / "services" / "api").mkdir(parents=True)

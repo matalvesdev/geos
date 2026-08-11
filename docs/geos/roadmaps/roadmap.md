@@ -40,12 +40,18 @@ Required by the Installation, Bootstrap & Adoption Model (spec §73). Statuses:
 
 ## Phase 1 — Knowledge + Research (first vertical slice)
 
-- SPEC-011 Embeddings (provider protocols + local/offline no-op) · SPEC-012 Hybrid RAG ·
-  SPEC-013 Knowledge Graph (nodes/edges in SQLite) · SPEC-014 Memory
-- Research engine (SPEC-021): QUESTION → PLAN → SOURCES → EXTRACTION → SYNTHESIS → INSIGHT →
-  KNOWLEDGE; deterministic mock provider first, real sources via connectors later.
-- Vertical slice 1: **Research → Knowledge → Content Brief → Blog Draft → Social Draft →
-  Approval → Schedule**, persisted in SQLite.
+| Item | SPEC | Status |
+|---|---|---|
+| Embeddings (provider + vector store SQLite, cache por content_hash) | SPEC-011 | ✅ IMPLEMENTED + TESTED |
+| Hybrid RAG (FTS + vector + graph boost, pesos configuráveis, rerank, citações) | SPEC-012 | ✅ IMPLEMENTED + TESTED |
+| Knowledge Graph (extração determinística + nós/arestas + graph extract/inspect) | SPEC-013 | ✅ IMPLEMENTED + TESTED |
+| Memory (MemoryStore com TTL/sensibilidade + WorkingMemory) | SPEC-014 | ✅ IMPLEMENTED + TESTED |
+| Research Engine (pipeline determinístico sobre a base local) | SPEC-021 | ✅ IMPLEMENTED + TESTED |
+| Vertical slice 1 (research → brief → draft → social → approval → schedule) | SPEC-007/021 | ✅ workflow `content-factory` + `workflows schedule/worker` |
+| Embeddings treinados/LLM (providers reais atrás dos protocolos) | SPEC-011 | PLANNED |
+
+O research engine é **determinístico sobre o índice local** (synthesis marcada `mock: True`);
+fontes externas reais e síntese por modelo chegam via `ModelProvider` (próxima fase).
 
 ## Phase 2 — Content + Growth engines
 

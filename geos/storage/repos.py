@@ -502,6 +502,40 @@ class KnowledgeRepository:
             )
             return edge_id
 
+    def doc_ids_for_chunks(self, chunk_ids: list[str]) -> dict[str, str]:
+        if not chunk_ids:
+            return {}
+        placeholders = ",".join("?" for _ in chunk_ids)
+        rows = self._db.conn_checked.execute(
+            f"SELECT chunk_id, document_id FROM document_chunks"
+            f" WHERE chunk_id IN ({placeholders})",
+            chunk_ids,
+        ).fetchall()
+        return {r["chunk_id"]: r["document_id"] for r in rows}
+
+    def chunks_for_document(self, document_id: str) -> list[dict[str, Any]]:
+        rows = self._db.conn_checked.execute(
+            "SELECT chunk_id, chunk_index, heading, position, content, metadata"
+            " FROM document_chunks WHERE document_id = ? ORDER BY chunk_index",
+            (document_id,),
+        ).fetchall()
+        result = []
+        for r in rows:
+            item = dict(r)
+            try:
+                item["metadata"] = json.loads(item["metadata"] or "{}")
+            except json.JSONDecodeError:
+                item["metadata"] = {}
+            result.append(item)
+        return result
+
+    def list_documents(self, limit: int = 1000) -> list[dict[str, Any]]:
+        rows = self._db.conn_checked.execute(
+            "SELECT id, uri, title, doc_type, source, created_at FROM documents"
+            " ORDER BY created_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
     def list_nodes(self, node_type: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
         q = "SELECT * FROM knowledge_nodes"
         params: list[Any] = []
@@ -520,6 +554,201 @@ class KnowledgeRepository:
         return [dict(r) for r in rows]
 
 
+# ---------------------------------------------------------------- Embeddings (SPEC-011)
+class EmbeddingRepository:
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def by_content_hash(self, content_hash: str) -> list[dict[str, Any]]:
+        rows = self._db.conn_checked.execute(
+            "SELECT * FROM embeddings WHERE content_hash = ?", (content_hash,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def upsert(self, chunk_id: str, document_id: str, content_hash: str,
+               vector: list[float], provider: str, model: str | None = None) -> str:
+        conn = self._db.conn_checked
+        row_id = new_id()
+        now = now_iso()
+        with conn:
+            conn.execute(
+                "INSERT INTO embeddings (id, workspace_id, content_hash, document_id, chunk_id,"
+                " dimension, vector, provider, model, created_at)"
+                " VALUES (?, 'default', ?, ?, ?, ?, ?, ?, ?, ?)"
+                " ON CONFLICT(chunk_id) DO UPDATE SET vector = excluded.vector,"
+                " content_hash = excluded.content_hash, provider = excluded.provider,"
+                " model = excluded.model",
+                (row_id, content_hash, document_id, chunk_id, len(vector),
+                 json.dumps(vector), provider, model, now),
+            )
+        return row_id
+
+    def delete_by_chunk_ids(self, chunk_ids: list[str]) -> int:
+        if not chunk_ids:
+            return 0
+        placeholders = ",".join("?" for _ in chunk_ids)
+        with self._db.conn_checked:
+            cur = self._db.conn_checked.execute(
+                f"DELETE FROM embeddings WHERE chunk_id IN ({placeholders})", chunk_ids
+            )
+            return cur.rowcount
+
+    def delete_by_document(self, document_id: str) -> int:
+        with self._db.conn_checked:
+            cur = self._db.conn_checked.execute(
+                "DELETE FROM embeddings WHERE document_id = ?", (document_id,)
+            )
+            return cur.rowcount
+
+    def candidates(self, doc_type: str | None = None, limit: int = 2000) -> list[dict[str, Any]]:
+        q = (
+            "SELECT e.chunk_id, e.vector, e.content_hash, c.content, c.heading, d.uri, d.title, d.doc_type"
+            " FROM embeddings e"
+            " JOIN document_chunks c ON c.chunk_id = e.chunk_id"
+            " JOIN documents d ON d.id = e.document_id"
+        )
+        params: list[Any] = []
+        if doc_type:
+            q += " WHERE d.doc_type = ?"
+            params.append(doc_type)
+        q += f" LIMIT ?"
+        params.append(limit)
+        rows = self._db.conn_checked.execute(q, params).fetchall()
+        result = []
+        for r in rows:
+            item = dict(r)
+            try:
+                item["vector"] = json.loads(item["vector"])
+            except (json.JSONDecodeError, TypeError):
+                item["vector"] = []
+            result.append(item)
+        return result
+
+
+# ---------------------------------------------------------------- Memory (SPEC-014)
+class MemoryRepository:
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def put(self, scope: str, key: str, value: str, source: str | None = None,
+            confidence: float | None = None, sensitivity: str = "INTERNAL",
+            retention_seconds: int | None = None) -> None:
+        now = now_iso()
+        expires = None
+        if retention_seconds is not None:
+            from datetime import datetime, timedelta, timezone
+
+            expires = (datetime.now(timezone.utc) + timedelta(seconds=retention_seconds)).isoformat()
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO memories (id, workspace_id, scope, key, value, source, confidence,"
+                " sensitivity, retention_seconds, created_at, expires_at)"
+                " VALUES (?, 'default', ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                " ON CONFLICT(scope, key) DO UPDATE SET value = excluded.value,"
+                " source = excluded.source, confidence = excluded.confidence,"
+                " sensitivity = excluded.sensitivity, retention_seconds = excluded.retention_seconds,"
+                " expires_at = excluded.expires_at",
+                (new_id(), scope, key, value, source, confidence, sensitivity,
+                 retention_seconds, now, expires),
+            )
+
+    def get(self, scope: str, key: str) -> dict[str, Any] | None:
+        row = self._db.conn_checked.execute(
+            "SELECT * FROM memories WHERE scope = ? AND key = ?", (scope, key)
+        ).fetchone()
+        if row is None:
+            return None
+        if row["expires_at"] and row["expires_at"] <= now_iso():
+            self.delete(scope, key)
+            return None
+        return dict(row)
+
+    def list(self, scope: str | None = None, limit: int = 200) -> list[dict[str, Any]]:
+        q = "SELECT * FROM memories"
+        params: list[Any] = []
+        if scope:
+            q += " WHERE scope = ?"
+            params.append(scope)
+        q += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        rows = self._db.conn_checked.execute(q, params).fetchall()
+        now = now_iso()
+        live = []
+        for r in rows:
+            if r["expires_at"] and r["expires_at"] <= now:
+                continue
+            live.append(dict(r))
+        return live
+
+    def delete(self, scope: str, key: str) -> bool:
+        with self._db.conn_checked:
+            cur = self._db.conn_checked.execute(
+                "DELETE FROM memories WHERE scope = ? AND key = ?", (scope, key)
+            )
+            return cur.rowcount > 0
+
+
+# ---------------------------------------------------------------- Research (SPEC-021)
+class ResearchRepository:
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def insert(self, research_id: str, question: str, status: str, plan: list[str],
+               sources: list[dict[str, Any]], extractions: list[dict[str, Any]],
+               synthesis: str, insights: list[dict[str, Any]],
+               opportunities: list[dict[str, Any]], trace_id: str | None = None) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO research (id, workspace_id, question, status, plan, sources,"
+                " extractions, synthesis, insights, opportunities, trace_id, created_at)"
+                " VALUES (?, 'default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (research_id, question, status, json.dumps(plan, ensure_ascii=False),
+                 json.dumps(sources, ensure_ascii=False),
+                 json.dumps(extractions, ensure_ascii=False), synthesis,
+                 json.dumps(insights, ensure_ascii=False),
+                 json.dumps(opportunities, ensure_ascii=False), trace_id, now_iso()),
+            )
+
+    def get(self, research_id: str) -> dict[str, Any] | None:
+        row = self._db.conn_checked.execute(
+            "SELECT * FROM research WHERE id = ?", (research_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        item = dict(row)
+        for field in ("plan", "sources", "extractions", "insights", "opportunities"):
+            try:
+                item[field] = json.loads(item[field] or "[]")
+            except json.JSONDecodeError:
+                item[field] = []
+        return item
+
+    def list(self, limit: int = 50) -> list[dict[str, Any]]:
+        rows = self._db.conn_checked.execute(
+            "SELECT id, question, status, created_at FROM research"
+            " ORDER BY created_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def insert_insight(self, insight_id: str, research_id: str, insight_type: str,
+                       content: str, evidence: str | None, confidence: float | None,
+                       source: str | None) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO insights (id, workspace_id, research_id, insight_type, content,"
+                " evidence, confidence, source, created_at)"
+                " VALUES (?, 'default', ?, ?, ?, ?, ?, ?, ?)",
+                (insight_id, research_id, insight_type, content, evidence, confidence,
+                 source, now_iso()),
+            )
+
+    def list_insights(self, limit: int = 100) -> list[dict[str, Any]]:
+        rows = self._db.conn_checked.execute(
+            "SELECT * FROM insights ORDER BY created_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 # ---------------------------------------------------------------- Factory
 class RepoFactory:
     """Single access point to repositories for a given Database (SPEC-003 R3.1)."""
@@ -531,6 +760,9 @@ class RepoFactory:
         self.jobs = JobRepository(db)
         self.approvals = ApprovalRepository(db)
         self.knowledge = KnowledgeRepository(db)
+        self.embeddings = EmbeddingRepository(db)
+        self.memories = MemoryRepository(db)
+        self.research = ResearchRepository(db)
 
 
 def _fts_query(query: str) -> str:

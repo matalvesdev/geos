@@ -3,6 +3,50 @@
 Todas as mudanças relevantes do GEOS são registradas aqui (spec §198). Formato
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e versionamento semântico.
 
+## [0.2.0] — 2026-08-11 — Phase 1: Knowledge + Research
+
+### Added
+
+- **Embeddings & Vector Store** (SPEC-011): `HashEmbeddingProvider` determinístico (n-gram
+  hashing, L2-normalizado, zero deps) + `SqliteVectorStore` (upsert/delete/search/hybrid),
+  cache por `content_hash` (spec §17), tabela `embeddings` (migration V2).
+- **Hybrid RAG** (SPEC-012): `HybridRetriever` combinando FTS5 + vetores + graph boost com
+  pesos configuráveis, rerank heurístico, proveniência por hit e contexto com citações.
+- **Knowledge Graph** (SPEC-013): `RuleBasedExtractor` determinístico (dicionário + keywords +
+  frases-problema, sem palpite de frases capitalizadas) + `GraphService` (neighbors,
+  related_documents, stats); CLI `geos graph extract` / `geos graph inspect`.
+- **Memory** (SPEC-014): `MemoryStore` com TTL, sensibilidade e scopes + `WorkingMemory`;
+  tabela `memories` (migration V2).
+- **Research Engine** (SPEC-021): pipeline QUESTION → PLAN → SOURCES → EXTRACTION → SYNTHESIS
+  → INSIGHT → KNOWLEDGE, determinístico sobre o índice local (synthesis `mock: True`),
+  persistido em `research`/`insights` + nós INSIGHT + evento `research.completed`;
+  CLI `geos research run`. Nunca inventa fontes.
+- **Vertical slice 1**: workflow `content-factory` (research → knowledge → brief → draft →
+  social → aprovação obrigatória → schedule) + handlers `research.run`/`content.brief`/
+  `schedule.record` + CLI `geos workflows schedule` / `geos workflows worker` (job
+  `workflow.run`) — SPEC-006 wiring de triggers cron.
+- **Migration V2** (`knowledge_phase1`): tabelas `embeddings`, `memories`, `research`,
+  `insights`. **CLI**: `knowledge reindex`, `graph extract/inspect`, `research run`,
+  `workflows schedule/worker`.
+- 30 novos testes (113 no total, `unittest`).
+
+### Fixed
+
+- **Ranking híbrido FTS (bug silencioso)**: `bm25()` do FTS5 retorna scores negativos
+  (mais negativo = melhor match); a normalização usava `abs(rank)`, invertendo a ordem
+  dos resultados. Corrigido para normalizar em `-rank` (mais forte = maior score) com
+  teste de regressão isolado (SPEC-012).
+- **`graph related_documents`**: removido N+1 (era `list_edges(2000)` dentro do loop de
+  topics + lookup por nó); agora é um único JOIN SQL parametrizado (SPEC-013).
+- `HybridRetriever` não acessa mais atributo privado `vector_store._provider` (nova
+  property pública `SqliteVectorStore.provider`); cache de embeddings limitado a 10k
+  entradas por processo.
+
+### Changed
+
+- Ingestão agora calcula embeddings por chunk (cache por hash; `--no-embed`/reindex
+  disponíveis). `workflows_dir` default `workflows` com fallback ao diretório do pacote.
+
 ## [0.1.0] — 2026-08-11 — Bootstrap
 
 ### Added

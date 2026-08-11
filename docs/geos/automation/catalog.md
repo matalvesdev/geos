@@ -17,6 +17,10 @@
 | A-007 | social-publish | Social | approval | draft → channel | SocialAgent | HUMAN_APPROVAL_REQUIRED | posts, reach | PLANNED |
 | A-008 | meeting-invite | Meetings | qualification | lead → slots → calendar | MeetingAgent | HUMAN_APPROVAL_REQUIRED | meetings | PLANNED |
 | A-009 | newsletter-send | Email | schedule | digest → ESP | NewsletterAgent | HUMAN_APPROVAL_REQUIRED | opens | PLANNED |
+| A-010 | research-run | Research | CLI/event | question → report+insights (mock) | ResearchAgent (determinístico) | none (read-only) | research rows, insights | ✅ IMPLEMENTED |
+| A-011 | graph-extract | Knowledge | CLI `geos graph extract` | docs → nós/arestas | RuleBasedExtractor | none | nodes, edges | ✅ IMPLEMENTED |
+| A-012 | hybrid-retrieval | Knowledge | CLI/workflow | query → hits+citações | HybridRetriever | none | hits, tokens | ✅ IMPLEMENTED |
+| A-013 | content-factory (slice 1) | Content | cron/manual | research→brief→draft→social→approval→schedule | ResearchAgent, WriterAgent | HUMAN_APPROVAL_REQUIRED (publish) | runs, approvals | ✅ IMPLEMENTED (v0.2.0) |
 
 ## Failure modes (all automations)
 
