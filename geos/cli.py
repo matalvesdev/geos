@@ -971,6 +971,89 @@ def cmd_blog_publish(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_social_prepare(args: argparse.Namespace) -> int:
+    from .domains.social import SocialEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        publish_dir = args.dir or "social"
+        if not Path(publish_dir).is_absolute():
+            publish_dir = str(Path(args.root) / publish_dir)
+        engine = SocialEngine(db, publish_dir=publish_dir, approvals=settings.approvals)
+        post = engine.prepare(args.content_id, channel=args.channel,
+                              adapter=args.adapter, scheduled_at=args.at)
+        print(f"prepared {post['id']} | {post['status']} | "
+              f"channel={post['channel']} slug={post['slug']}")
+        print(f"  chars={len(post['text'])} hashtags={len(post['hashtags'])}")
+        if post.get("scheduled_at"):
+            print(f"  scheduled_at={post['scheduled_at']}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_social_list(args: argparse.Namespace) -> int:
+    from .domains.social import SocialEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        posts = SocialEngine(db, approvals=settings.approvals).list(
+            status=args.status, channel=args.channel)
+        print(f"{len(posts)} social post(s)")
+        for post in posts:
+            at = post.get("scheduled_at") or ""
+            print(f"  {post['status']:16s} {post['channel']:10s} "
+                  f"{post['id']} {post['slug'][:30]:30s} {at[:19]}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_social_due(args: argparse.Namespace) -> int:
+    from .domains.social import SocialEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        posts = SocialEngine(db, approvals=settings.approvals).due()
+        print(f"{len(posts)} social post(s) agendados vencidos")
+        for post in posts:
+            print(f"  {post['id']} {post['channel']:10s} {post['slug'][:40]}"
+                  f" scheduled_at={post.get('scheduled_at')}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_social_publish(args: argparse.Namespace) -> int:
+    from .domains.social import SocialEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        engine = SocialEngine(db, approvals=settings.approvals)
+        post = engine.publish(args.post_id, approve=args.approve,
+                              decided_by=args.by or "cli")
+        if post["status"] in ("APPROVAL_PENDING", "SCHEDULED"):
+            print(f"{post['id']}: {post['status']} — "
+                  f"aprovação humana obrigatória (social.publish, SPEC-025 R1)")
+            print(f"  approval_id={post.get('approval_id')} — reexecute com --approve"
+                  + (" após decidir" if post["status"] == "APPROVAL_PENDING" else ""))
+        else:
+            print(f"{post['id']}: {post['status']}")
+            print(f"  path: {post.get('published_path')} url: {post.get('published_url')}")
+            print(f"  approval_id={post.get('approval_id')}")
+    finally:
+        db.close()
+    return 0
+
+
 def cmd_repo(args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
     registry = RepositoryRegistry(root / REGISTRY_PATH)
@@ -1173,6 +1256,32 @@ def main(argv: list[str] | None = None) -> int:
                             help="registrar decisão humana e publicar")
     p_bpublish.add_argument("--by", default=None, help="quem aprovou (default: cli)")
     p_bpublish.set_defaults(func=cmd_blog_publish)
+
+    p_social = sub.add_parser("social", help="social scheduler (SPEC-025)")
+    p_social_sub = p_social.add_subparsers(dest="social_action", required=True)
+    p_sprepare = p_social_sub.add_parser("prepare", help="preparar post social de conteúdo aprovado")
+    p_sprepare.add_argument("content_id")
+    p_sprepare.add_argument("--channel", required=True,
+                            choices=["x", "linkedin", "bluesky", "instagram"],
+                            help="canal (default: obrigatório)")
+    p_sprepare.add_argument("--adapter", default="local", help="adapter (default: local)")
+    p_sprepare.add_argument("--dir", default=None,
+                            help="publish dir (default: social/ do workspace)")
+    p_sprepare.add_argument("--at", default=None,
+                            help="agendar publicação (ISO datetime, SPEC-025 R4)")
+    p_sprepare.set_defaults(func=cmd_social_prepare)
+    p_slist = p_social_sub.add_parser("list", help="list social posts")
+    p_slist.add_argument("--status", default=None)
+    p_slist.add_argument("--channel", default=None)
+    p_slist.set_defaults(func=cmd_social_list)
+    p_sdue = p_social_sub.add_parser("due", help="list agendados vencidos (scheduler)")
+    p_sdue.set_defaults(func=cmd_social_due)
+    p_spublish = p_social_sub.add_parser("publish", help="publicar (aprovação humana obrigatória)")
+    p_spublish.add_argument("post_id")
+    p_spublish.add_argument("--approve", action="store_true",
+                            help="registrar decisão humana e publicar")
+    p_spublish.add_argument("--by", default=None, help="quem aprovou (default: cli)")
+    p_spublish.set_defaults(func=cmd_social_publish)
 
     p_content = sub.add_parser("content", help="content engine (SPEC-022)")
     p_content_sub = p_content.add_subparsers(dest="content_action", required=True)

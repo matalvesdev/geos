@@ -3,6 +3,49 @@
 Todas as mudanças relevantes do GEOS são registradas aqui (spec §198). Formato
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e versionamento semântico.
 
+## [0.8.0] — 2026-08-11 — Social Scheduler (SPEC-025)
+
+### Added
+
+- **Social Scheduler** (SPEC-025, spec master §78–79): transforma conteúdo aprovado em
+  posts determinísticos por canal — hook (1ª linha do body) + excerto + CTA + hashtags
+  (keywords slugificadas com acentos normalizados, dedup, máx. 5).
+- **Limites honestos por canal** (SPEC-025 R2): `x`=280, `linkedin`=3000,
+  `bluesky`=300, `instagram`=2200 — o builder nunca excede; truncamento marca
+  `truncated` (evento `social.prepared`), nunca corta em silêncio.
+- **Aprovação humana obrigatória** (spec §47): `social.publish` é
+  HUMAN_APPROVAL_REQUIRED; sem decisão, nada externo acontece — post fica
+  `APPROVAL_PENDING` com approval reusado em republishes gated (sem spam na fila).
+- **Agendamento** (SPEC-025 R4): `--at` no prepare registra `scheduled_at`; publish
+  aprovado com data futura → `SCHEDULED` (nada externo até o horário); `due` lista os
+  vencidos para o scheduler/worker futuro.
+- **Adapters**: protocolo `SocialAdapter` + registro por nome; `LocalSocialAdapter`
+  (escreve `<channel>-<slug>.txt` em dir configurado, default `social/`). APIs reais
+  (X/LinkedIn/Bluesky/Instagram) ficam para fases futuras atrás do mesmo protocolo.
+- **Migration V8** (`social_scheduler`): tabela `social_posts` (status DRAFT →
+  APPROVAL_PENDING → SCHEDULED/PUBLISHED/FAILED, índice único (content_id, channel),
+  scheduled_at, approval_id).
+- **CLI**: `geos social prepare/list/due/publish [--approve] [--by] [--channel]
+  [--at]`.
+- 25 novos testes (208 no total).
+
+### Fixed
+
+- **Hashtags com acentos** (revisão durante o SPEC-025): slugify puro gerava
+  `finan-as` para `finanças`; agora NFKD-normaliza antes (ASCII determinístico).
+- **Limite de canal estourado** (revisão): o antigo piso de 20 chars por parte podia
+  somar além do limite; agora o orçamento reserva as hashtags e há safety net final
+  (`chars` nunca excede o limite, SPEC-025 R2).
+- **Re-prepare de post FAILED quebrava** (revisão): o índice único (content_id,
+  channel) estourava IntegrityError cru; agora a linha FAILED é reusada em place.
+- **Hashtags duplicadas no arquivo** (smoke test): renderer agora monta as hashtags
+  do campo `hashtags` exatamente uma vez (texto nunca embute hashtags).
+
+### Changed
+
+- README (208 testes, features de social), roadmap SPEC-025 ✅, catálogo de automações
+  (A-007/A-023..A-025).
+
 ## [0.7.0] — 2026-08-11 — Blog Publisher (SPEC-024)
 
 ### Added

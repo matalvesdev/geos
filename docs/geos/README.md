@@ -30,7 +30,7 @@ docs/geos/
 ├── architecture/vision.md    ← GEOS architecture vision
 ├── adrs/GEOS-ADR-0001..0006  ← foundational decisions
 ├── roadmaps/roadmap.md       ← phased roadmap + mandated adoption specs
-├── specs/SPEC-001..010       ← specs implemented in this bootstrap
+├── specs/SPEC-001..025/034/039 ← specs implemented (ver roadmap.md)
 ├── automation/catalog.md     ← automation catalog (L0..L5 maturity)
 └── state/                    ← (populated by `geos init` runtime state, not hand-written)
 ```
@@ -57,17 +57,23 @@ docs/geos/
 | Knowledge graph (extração determinística + CLI) | SPEC-013 | `IMPLEMENTED` + `TESTED` |
 | Memory (TTL, sensibilidade) | SPEC-014 | `IMPLEMENTED` + `TESTED` |
 | Research engine + vertical slice 1 (`content-factory`) | SPEC-021 | `IMPLEMENTED` + `TESTED` |
+| Content engine (objetos, scoring, pipeline, versionamento) | SPEC-022 | `IMPLEMENTED` + `TESTED` |
+| SEO engine (auditoria determinística) | SPEC-023 | `IMPLEMENTED` + `TESTED` |
+| Blog publisher (markdown + front matter, approval-gated) | SPEC-024 | `IMPLEMENTED` + `TESTED` |
+| Social scheduler (posts por canal, agendamento, approval-gated) | SPEC-025 | `IMPLEMENTED` + `TESTED` |
+| Opportunity + experiment engine (ICE/RICE explicável) | SPEC-034 | `IMPLEMENTED` + `TESTED` |
+| Model providers (LLM OpenAI-compatible, síntese ancorada) | SPEC-039 | `IMPLEMENTED` + `TESTED` |
 
-**Not yet implemented** (see `roadmaps/roadmap.md`): embeddings treinados/providers reais,
-rerank model-based, agent runtime além de primitives, approvals UI, content engine completo,
-SEO, lead intelligence, CRM, meetings, Academy, community, control center, integrações externas.
+**Not yet implemented** (see `roadmaps/roadmap.md`): adapters reais de blog/social (CMS,
+APIs), analytics, campaigns, lead intelligence, CRM, meetings, Academy, community,
+control center, integrações externas.
 
 ## Development
 
 From the repository root (`geos/`):
 
 ```bash
-python -m unittest discover -s tests -t .    # 83 tests (stdlib, zero deps)
+python -m unittest discover -s tests -t .    # 208 tests (stdlib, zero deps)
 python -m geos.cli doctor                     # environment + config checks
 ```
 

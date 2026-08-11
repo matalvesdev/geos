@@ -8,7 +8,7 @@ Resumo das fases:
 | **0 — Foundation** | Core runtime, SQLite, repositórios, event bus, jobs, scheduler, workflow engine, discovery (mode/capabilities), knowledge + FTS, CLI, docs | ✅ v0.1.0 (bootstrap) |
 | 0.5 — OSS readiness | LICENSE, CONTRIBUTING, SECURITY, CHANGELOG, examples, CI | ✅ 2026-08-11 |
 | 1 — Knowledge + Research | Embeddings/VectorStore, Hybrid RAG, Knowledge Graph, Memory, Research Engine, vertical slice 1 (research→content→approval) | PLANNED |
-| 2 — Content + Growth | Content engine, SEO, blog publisher, social scheduler (approval-gated), campaigns, analytics | PLANNED |
+| 2 — Content + Growth | Content engine, SEO, blog publisher, social scheduler (approval-gated), campaigns, analytics | ✅ parcial (SPEC-022/023/024/025/034) — campaigns/analytics PLANNED |
 | 3 — Leads, CRM, Meetings | Lead intelligence, scoring (explicável), qualification, CRM (SQLite fallback), next best action, meeting scheduling (Google Calendar/Meet adapter) | PLANNED |
 | 4 — Education, Community, DevRel | Academy (tracks/courses/labs/certifications), community (Discord blueprint), DevRel, social avançado | PLANNED |
 | 5 — Control Center | Dashboard, RAG debugger, run debugger, backups, self-audit, self-improvement | PLANNED |

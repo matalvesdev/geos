@@ -360,6 +360,32 @@ CREATE INDEX IF NOT EXISTS idx_content_versions_content ON content_versions(cont
 """
 
 
+V8_SOCIAL = """
+CREATE TABLE IF NOT EXISTS social_posts (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  content_id TEXT REFERENCES content(id),
+  slug TEXT NOT NULL,
+  channel TEXT NOT NULL,
+  text TEXT NOT NULL,
+  hashtags TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'DRAFT',
+  scheduled_at TEXT,
+  adapter TEXT NOT NULL DEFAULT 'local',
+  publish_dir TEXT,
+  published_path TEXT,
+  published_url TEXT,
+  published_at TEXT,
+  approval_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_social_content_channel ON social_posts(content_id, channel);
+CREATE INDEX IF NOT EXISTS idx_social_status ON social_posts(status);
+CREATE INDEX IF NOT EXISTS idx_social_scheduled ON social_posts(scheduled_at);
+"""
+
+
 V7_BLOG = """
 CREATE TABLE IF NOT EXISTS blog_posts (
   id TEXT PRIMARY KEY,
@@ -393,6 +419,7 @@ MIGRATIONS: list[tuple[int, str, str]] = [
     (5, "seo_engine", V5_SEO),
     (6, "opportunities_experiments", V6_OPPORTUNITIES),
     (7, "blog_publisher", V7_BLOG),
+    (8, "social_scheduler", V8_SOCIAL),
 ]
 
 MAX_VERSION = max(v for v, _, _ in MIGRATIONS)
