@@ -11,6 +11,7 @@ from pathlib import Path
 
 from . import __version__
 from .config import ConfigError, Settings
+from .update import cmd_update, get_current_version, check_for_updates
 from .formatting import (
     heading, subheading, value, label, key, dim, bold, success, error, warning, info,
     status_ok, status_warn, status_error, status_info, status_arrow,
@@ -1506,6 +1507,15 @@ def main(argv: list[str] | None = None) -> int:
     p_init.set_defaults(func=cmd_init)
 
     sub.add_parser("doctor", help="environment + config checks").set_defaults(func=cmd_doctor)
+
+    p_update = sub.add_parser("update", help="check for updates or install latest version")
+    p_update.add_argument("--check", action="store_true", dest="check_only",
+                          help="only check for updates, don't install")
+    p_update.add_argument("--force", action="store_true",
+                          help="force update even if already up to date")
+    p_update.add_argument("--pip", action="store_true",
+                          help="use pip install from PyPI instead of GitHub")
+    p_update.set_defaults(func=cmd_update)
 
     p_bootstrap = sub.add_parser("bootstrap",
                                  help="SPEC-103: scaffold greenfield workspace")
