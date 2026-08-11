@@ -11,6 +11,14 @@ from pathlib import Path
 
 from . import __version__
 from .config import ConfigError, Settings
+from .formatting import (
+    heading, subheading, value, label, key, dim, bold, success, error, warning, info,
+    status_ok, status_warn, status_error, status_info, status_arrow,
+    badge_ok, badge_warn, badge_error, badge_info, badge_version, badge_spec,
+    print_ok, print_warn, print_error, print_info, print_arrow, print_kv,
+    print_section, print_banner, table_row, table_header, table_divider,
+    Icon, Color
+)
 from .core.jobs import PermanentError, RetryPolicy, SqliteJobQueue, Worker
 from .core.scheduler import Schedule, Scheduler
 from .core.workflows import Workflow, WorkflowEngine, WorkflowLoadError
@@ -84,22 +92,29 @@ def cmd_init(args: argparse.Namespace) -> int:
             encoding="utf-8",
         )
 
-    print(f"GEOS Initialization v{__version__}")
-    print(f"\nMode: {mode.mode}")
-    print(f"Confidence: {mode.confidence}")
-    print(f"Detected by: {mode.detected_by}")
-    print("\nEvidence:")
+    from .formatting import (heading, status_ok, status_info, badge_ok,
+                             badge_version, value, bold, dim, print_kv)
+
+    print(heading(f"GEOS Initialization {badge_version('v' + __version__)}", level=1))
+    print()
+    print_kv("Mode", bold(mode.mode))
+    print_kv("Confidence", value(mode.confidence))
+    print_kv("Detected by", dim(mode.detected_by))
+    print()
+    print(f"  {bold('Evidence:')}")
     for item in mode.evidence:
-        print(f"  ✓ {item}")
-    print("\nDetected capabilities:")
+        print(f"    {status_ok()} {item}")
+    print()
+    print(f"  {bold('Detected capabilities:')}")
     for d in detections:
-        print(f"  ✓ {d.name} ({d.confidence}) — {d.capability}")
-    print(f"\nManifest: {manifest_path.relative_to(root)}")
+        print(f"    {status_ok()} {d.name} {dim(f'({d.confidence})')} — {d.capability}")
+    print()
+    print_kv("Manifest", str(manifest_path.relative_to(root)))
     if registry.list():
-        print("Repositories:")
+        print(f"\n  {bold('Repositories:')}")
         for r in registry.list():
-            print(f"  • {r.id} -> {r.path}")
-    print("\nNext: geos db migrate && geos doctor")
+            print(f"    {status_info()} {r.id} → {r.path}")
+    print(f"\n  {bold('Next:')} geos db migrate && geos doctor")
     return 0
 
 
@@ -125,35 +140,43 @@ def cmd_bootstrap(args: argparse.Namespace) -> int:
     except Exception as exc:  # noqa: BLE001 - bootstrap must report cleanly
         print(f"bootstrap error: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
-    print(f"GEOS Bootstrap v{__version__} (SPEC-103) — workspace: {result['root']}")
-    print(f"  config: {result['config']}")
-    print(f"  workflows copiados: {result['workflows']}")
-    print(f"  docs de exemplo: {result['example_docs']}")
-    print(f"  schema: v{result['schema_version']}")
-    print(f"  knowledge ingest: {result['ingested']}")
-    print(f"  conteúdo seed: {result['content_id']} (APPROVED)")
-    print(f"  automações registradas: {', '.join(result['automations'])}")
-    print(f"  manifest: {result['manifest']}")
-    print("\nPróximos passos:")
-    print("  geos workflows list")
-    print("  geos knowledge search \"cash application\"")
-    print("  geos content list")
-    print("  geos analytics collect")
-    print("  geos doctor")
+    print(heading(f"GEOS Bootstrap {badge_version('v' + __version__)} {badge_spec('SPEC-103')}", level=1))
+    print()
+    print_kv("Workspace", value(result['root']))
+    print_kv("Config", result['config'])
+    print_kv("Workflows", str(result['workflows']))
+    print_kv("Docs de exemplo", str(result['example_docs']))
+    print_kv("Schema", value(f"v{result['schema_version']}"))
+    print_kv("Knowledge ingest", str(result['ingested']))
+    print_kv("Conteúdo seed", f"{result['content_id']} {success('APPROVED')}")
+    print_kv("Automações", ', '.join(result['automations']))
+    print_kv("Manifest", result['manifest'])
+    print(f"\n  {bold('Próximos passos:')}")
+    print(f"    {status_arrow('geos workflows list')}")
+    print(f"    {status_arrow('geos knowledge search \"cash application\"')}")
+    print(f"    {status_arrow('geos content list')}")
+    print(f"    {status_arrow('geos analytics collect')}")
+    print(f"    {status_arrow('geos doctor')}")
     return 0
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
+    from .formatting import (status_ok, status_error, badge_ok, badge_error,
+                             heading, value, bold, success, error)
+
     root = Path(args.root).resolve()
     ok = True
 
     def check(label: str, passed: bool, detail: str = "") -> None:
         nonlocal ok
-        status = "OK " if passed else "FAIL"
         if not passed:
             ok = False
-        print(f"[{status}] {label}" + (f" — {detail}" if detail else ""))
+        icon = status_ok() if passed else status_error()
+        detail_str = f" — {value(detail)}" if detail else ""
+        print(f"  {icon} {label}{detail_str}")
 
+    print(heading(f"GEOS Doctor", level=2))
+    print()
     check("Python >= 3.11", sys.version_info >= (3, 11), f"{sys.version_info.major}.{sys.version_info.minor}")
     try:
         import yaml  # noqa: F401
@@ -182,7 +205,11 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         check("Database", False, str(exc))
     writable = root.is_dir()
     check("Workspace writable", writable)
-    print("\nGEOS Doctor:", "ALL CHECKS PASSED" if ok else "ISSUES FOUND")
+    print()
+    if ok:
+        print(f"  {badge_ok('ALL CHECKS PASSED')}")
+    else:
+        print(f"  {badge_error('ISSUES FOUND')}")
     return 0 if ok else 1
 
 
@@ -192,7 +219,7 @@ def cmd_db_migrate(args: argparse.Namespace) -> int:
     try:
         before = db.current_version()
         after = db.migrate()
-        print(f"Schema version: {before} -> {after}")
+        print(f"  {status_ok()} Schema: {value(before)} → {value(after)}")
     finally:
         db.close()
     return 0
@@ -219,11 +246,12 @@ def cmd_knowledge_ingest(args: argparse.Namespace) -> int:
             doc_type=args.type,
             provider=_embedding_provider(settings, args.provider),
         )
-        print(f"Ingest: {result.files_seen} files | added={result.added} "
-              f"updated={result.updated} unchanged={result.unchanged} "
-              f"chunks={result.chunks} embeddings={result.embeddings}")
-        for error in result.errors[:10]:
-            print(f"  ! {error}")
+        print(f"  {status_ok()} Ingest complete:")
+        print(f"    files={value(result.files_seen)} added={value(result.added)} "
+              f"updated={value(result.updated)} unchanged={value(result.unchanged)}")
+        print(f"    chunks={value(result.chunks)} embeddings={value(result.embeddings)}")
+        for err in result.errors[:10]:
+            print(f"    {status_warn()} {err}")
     finally:
         db.close()
     return 0
@@ -237,12 +265,14 @@ def cmd_knowledge_search(args: argparse.Namespace) -> int:
     db.migrate()
     try:
         hits = search(db, query=args.query, limit=args.limit, doc_type=args.type)
-        print(f"{len(hits)} result(s) for: {args.query!r}")
+        print(f"  {status_info()} {value(len(hits))} result(s) for: {bold(args.query)!r}")
         for hit in hits:
-            print(f"\n[{hit['rank']:.1f}] {hit['title']} ({hit['uri']})")
+            rank_str = value(f"{hit['rank']:.1f}")
+            uri_str = dim(f"({hit['uri']})")
+            print(f"\n  [{rank_str}] {bold(hit['title'])} {uri_str}")
             if hit["heading"]:
-                print(f"    heading: {hit['heading']}")
-            print(f"    {hit['snippet']}")
+                print(f"    {label('heading')}: {hit['heading']}")
+            print(f"    {dim(hit['snippet'][:120])}")
     finally:
         db.close()
     return 0
@@ -270,7 +300,7 @@ def cmd_knowledge_reindex(args: argparse.Namespace) -> int:
     db.migrate()
     try:
         total = reindex_embeddings(db, provider=_embedding_provider(settings, args.provider))
-        print(f"reindex: embeddings reconstruídos={total}")
+        print(f"  {status_ok()} Reindex: embeddings reconstruídos={value(total)}")
     finally:
         db.close()
     return 0
@@ -320,11 +350,12 @@ def cmd_workflows_run(args: argparse.Namespace) -> int:
     try:
         engine = WorkflowEngine(db)
         result = engine.run(workflow, inputs=inputs)
-        print(f"workflow: {result.workflow_id} | status: {result.status.value} | trace: {result.trace_id}")
+        print(f"  {status_ok()} Workflow: {bold(result.workflow_id)}")
+        print(f"    {label('status')}: {success(result.status.value)} {label('trace')}: {dim(result.trace_id)}")
         for step in result.steps:
-            status = step.status.value
-            extra = f" | {step.error}" if step.error else ""
-            print(f"  - {step.id:24s} {status}{extra}")
+            step_status = success(step.status.value) if step.status.value == 'SUCCESS' else error(step.status.value) if step.status.value == 'FAILED' else warning(step.status.value)
+            extra = f" {error(step.error)}" if step.error else ""
+            print(f"    {status_arrow()} {step.id:24s} {step_status}{extra}")
     finally:
         db.close()
     return 0
@@ -338,10 +369,11 @@ def cmd_runs_list(args: argparse.Namespace) -> int:
     db.migrate()
     try:
         runs = Telemetry(db).list(status=args.status, limit=args.limit)
-        print(f"{len(runs)} run(s)")
+        print(f"  {status_info()} {value(len(runs))} run(s)")
         for run in runs:
-            print(f"  {run.started_at[:19]} {run.workflow_id or run.agent or '-':24s} "
-                  f"{run.status:8s} {run.error or ''}")
+            status_color = success(run.status) if run.status == 'SUCCESS' else error(run.status) if run.status == 'FAILED' else warning(run.status)
+            print(f"    {dim(run.started_at[:19])} {(run.workflow_id or run.agent or '-'):24s} "
+                  f"{status_color:8s} {dim(run.error or '')}")
     finally:
         db.close()
     return 0
@@ -355,9 +387,9 @@ def cmd_approvals_list(args: argparse.Namespace) -> int:
         from .core.approvals import ApprovalEngine
 
         pending = ApprovalEngine(db, settings.approvals).pending()
-        print(f"{len(pending)} pending approval(s)")
+        print(f"  {status_warn()} {value(len(pending))} pending approval(s)")
         for approval in pending:
-            print(f"  {approval.id} {approval.action} risk={approval.risk} agent={approval.agent}")
+            print(f"    {dim(approval.id[:12])} {bold(approval.action)} {label('risk')}={warning(approval.risk)} {label('agent')}={approval.agent}")
     finally:
         db.close()
     return 0
@@ -464,9 +496,9 @@ def cmd_automations_list(args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
     registry = AutomationRegistry(root / ".geos" / "automations.json")
     entries = registry.list()
-    print(f"{len(entries)} automação(ões) agendada(s)")
+    print(f"  {status_info()} {value(len(entries))} automação(ões) agendada(s)")
     for entry in entries:
-        print(f"  {entry.id:22s} cron={entry.cron:16s} kind={entry.kind}")
+        print(f"    {bold(entry.id):22s} {label('cron')}={value(entry.cron):16s} {label('kind')}={entry.kind}")
     return 0
 
 
@@ -483,7 +515,7 @@ def cmd_automations_run(args: argparse.Namespace) -> int:
                                       / "automations.json")
         enqueued, processed = run_automations(registry, db,
                                               approvals=settings.approvals)
-        print(f"automations: enfileirados={enqueued} processados={processed}")
+        print(f"  {status_ok()} Automations: enfileirados={value(enqueued)} processados={value(processed)}")
     finally:
         db.close()
     return 0
@@ -1456,11 +1488,14 @@ def _force_utf8_stdio() -> None:
 
 def main(argv: list[str] | None = None) -> int:
     _force_utf8_stdio()
+    from .formatting import print_banner, bold, value, dim
+
     parser = argparse.ArgumentParser(
         prog="geos",
         description="GEOS — Growth, Education & Organizational System",
     )
-    parser.add_argument("--version", action="version", version=f"geos {__version__}")
+    parser.add_argument("--version", action="version",
+                        version=f"geos {bold('v' + __version__)} — {dim('AI Agent Framework for Growth')}")
     parser.add_argument("--root", default=".", help="workspace root (default: .)")
     parser.add_argument("--config", default=None, help="path to geos.yaml")
     sub = parser.add_subparsers(dest="command", required=True)

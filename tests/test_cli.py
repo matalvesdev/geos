@@ -21,7 +21,7 @@ def run_cli(root: Path, *argv: str) -> subprocess.CompletedProcess[str]:
     env["PYTHONUTF8"] = "1"
     return subprocess.run(
         [sys.executable, "-m", "geos.cli", "--root", str(root), *argv],
-        capture_output=True, text=True, env=env, cwd=str(GEO),
+        capture_output=True, text=True, encoding="utf-8", errors="replace", env=env, cwd=str(GEO),
     )
 
 
@@ -64,7 +64,7 @@ class CliTests(unittest.TestCase):
         with TempDir() as tmp:
             proc = run_cli(tmp, "db", "migrate")
             self.assertEqual(proc.returncode, 0, proc.stderr)
-            self.assertIn("Schema version", proc.stdout)
+            self.assertIn("Schema:", proc.stdout)
 
     def test_knowledge_ingest_search_cli(self) -> None:
         with TempDir() as tmp:
