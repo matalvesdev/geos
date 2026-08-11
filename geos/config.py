@@ -18,6 +18,7 @@ _TOP_LEVEL_KEYS = {
     "company",
     "storage",
     "knowledge",
+    "models",
     "agents",
     "automations",
     "approvals",
@@ -39,6 +40,7 @@ class Settings:
     knowledge_rag: bool = True
     knowledge_graph: bool = True
     knowledge_embeddings: dict[str, Any] = field(default_factory=dict)
+    models: dict[str, Any] = field(default_factory=dict)
     agents: dict[str, Any] = field(default_factory=dict)
     automations: dict[str, Any] = field(default_factory=dict)
     approvals: dict[str, str] = field(default_factory=dict)
@@ -89,6 +91,7 @@ class Settings:
             settings.knowledge_graph = bool(knowledge.get("graph", settings.knowledge_graph))
             settings.knowledge_embeddings = dict(knowledge.get("embeddings") or {})
 
+        settings.models = dict(raw.get("models") or {})
         settings.agents = dict(raw.get("agents") or {})
         settings.automations = dict(raw.get("automations") or {})
         settings.approvals = {str(k): str(v) for k, v in (raw.get("approvals") or {}).items()}

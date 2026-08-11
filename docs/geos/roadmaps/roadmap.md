@@ -49,9 +49,12 @@ Required by the Installation, Bootstrap & Adoption Model (spec §73). Statuses:
 | Research Engine (pipeline determinístico sobre a base local) | SPEC-021 | ✅ IMPLEMENTED + TESTED |
 | Vertical slice 1 (research → brief → draft → social → approval → schedule) | SPEC-007/021 | ✅ workflow `content-factory` + `workflows schedule/worker` |
 | Embeddings treinados/LLM (providers reais atrás dos protocolos) | SPEC-011 | ✅ OpenAI-compatible provider + factory (`knowledge.embeddings`) |
+| ModelProvider (protocolo + OpenAI-compatible + síntese ancorada com citações) | SPEC-039 | ✅ IMPLEMENTED + TESTED (`models info/test`, fallback mock honesto) |
 
-O research engine é **determinístico sobre o índice local** (synthesis marcada `mock: True`);
-fontes externas reais e síntese por modelo chegam via `ModelProvider` (próxima fase).
+O research engine é determinístico sobre o índice local por default (synthesis `mock: True`);
+com `models:` configurado, a síntese é gerada por modelo **estritamente ancorada nas fontes**
+recuperadas (citações [F#], `mock: False`, modelo/provedor persistidos — SPEC-039). Se o
+provider falhar, cai para o mock (nunca fabrica conteúdo).
 
 ## Phase 2 — Content + Growth engines
 

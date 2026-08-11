@@ -3,6 +3,35 @@
 Todas as mudanças relevantes do GEOS são registradas aqui (spec §198). Formato
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e versionamento semântico.
 
+## [0.4.0] — 2026-08-11 — Model Providers (SPEC-039)
+
+### Added
+
+- **ModelProvider** (spec §35 / SPEC-039): protocolo `complete(system, user, …)` →
+  `ModelResponse(text, model, provider, finish_reason, usage, latency_ms, mock)`;
+  `OpenAICompatibleModelProvider` com stdlib `urllib` (zero deps; OpenAI, Azure,
+  vLLM/Ollama locais; chave via `GEOS_OPENAI_API_KEY`/`OPENAI_API_KEY`); factory
+  `provider_from_config` lendo a seção `models` do `geos.yaml`.
+- **Síntese real do ResearchEngine**: com provider configurado, a síntese é gerada
+  por LLM **estritamente ancorada nas fontes recuperadas** (regras anti-alucinação +
+  citações [F#]); linha registra `model`/`provider`/`mock` (migration V4, aditiva).
+  Sem provider (default), nada muda — síntese mock determinística.
+- **CLI**: `geos models info` (config) e `geos models test` (conectividade live).
+- Migration V4 (`model_provenance`): `ALTER TABLE research ADD COLUMN model/provider/
+mock` — segura em bancos existentes com dados.
+
+### Fixed
+
+- Fallback honesto mesmo quando o provider retorna **texto vazio** (regressão: o raise
+  fora do try derrubava o research inteiro; agora cai para o mock — SPEC-039 R3).
+- `http.client.IncompleteRead`/`BadStatusLine` (HTTPException) e `KeyError` em shape
+  malformado agora viram `ModelError` tipado — nenhuma exceção crua escapa.
+
+### Changed
+
+- README atualizado (143 testes, features de modelos). `geos.yaml` default documenta a
+  seção `models` comentada.
+
 ## [0.3.0] — 2026-08-11 — Content Engine + PyPI readiness + real embeddings
 
 ### Added

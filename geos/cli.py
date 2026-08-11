@@ -143,6 +143,12 @@ knowledge:
   #     model: text-embedding-3-small
   #     endpoint: https://api.openai.com/v1/embeddings
 
+# models:
+#   provider: none    # none (síntese mock determinística) | openai (chave via env GEOS_OPENAI_API_KEY)
+#   options:
+#     model: gpt-4o-mini
+#     endpoint: https://api.openai.com/v1/chat/completions
+
 agents:
   research: true
   content: true
@@ -467,26 +473,69 @@ def cmd_graph_inspect(args: argparse.Namespace) -> int:
 
 def cmd_research_run(args: argparse.Namespace) -> int:
     from .domains.research import ResearchEngine
+    from .core.models import provider_from_config
 
     settings = _settings(args.root, args.config)
     db = _db(settings)
     db.migrate()
     try:
-        engine = ResearchEngine(db)
+        engine = ResearchEngine(db, model_provider=provider_from_config(settings.models))
         report = engine.run(args.question, sources_limit=args.sources_limit)
+        synth_line = (report.synthesis or "").splitlines()[0]
         print(f"research: {report.id} | status={report.status} | mock={report.mock} | empty={report.empty}")
+        if report.model:
+            print(f"model: {report.model} (provider={report.provider})")
         print(f"question: {report.question}")
         print(f"sources ({len(report.sources)}):")
         for source in report.sources:
             print(f"  - [{source.score:.3f}] {source.title} ({source.uri})")
         print("\nsynthesis:")
-        print(f"  {report.synthesis.splitlines()[0]}")
+        print(f"  {synth_line}")
         print("\ninsights:")
         for insight in report.insights:
             print(f"  - [{insight.get('type')}] {insight.get('content')}")
     finally:
         db.close()
     return 0
+
+
+def cmd_models_info(args: argparse.Namespace) -> int:
+    from .core.models import provider_from_config
+
+    settings = _settings(args.root, args.config)
+    try:
+        provider = provider_from_config(settings.models)
+    except Exception as exc:  # noqa: BLE001
+        print(f"models: config error — {type(exc).__name__}: {exc}")
+        return 1
+    if provider is None:
+        print("models: none (síntese determinística mock — configure `models:` no geos.yaml)")
+        return 0
+    meta = provider.metadata()
+    print(f"models: provider={meta.get('provider')} model={meta.get('model')}")
+    print(f"  endpoint: {meta.get('endpoint')}")
+    return 0
+
+
+def cmd_models_test(args: argparse.Namespace) -> int:
+    from .core.models import provider_from_config
+
+    settings = _settings(args.root, args.config)
+    try:
+        provider = provider_from_config(settings.models)
+        if provider is None:
+            print("models: none — nada para testar (configure `models:` no geos.yaml)")
+            return 1
+        response = provider.complete(
+            "Você é um verificador. Responda apenas: OK.", "Teste de conectividade GEOS.",
+            max_tokens=8,
+        )
+        print(f"models: OK — {response.model} respondeu em {response.latency_ms}ms")
+        print(f"  resposta: {response.text[:120]}")
+        return 0
+    except Exception as exc:  # noqa: BLE001 - test must report failures cleanly
+        print(f"models: FAIL — {type(exc).__name__}: {exc}")
+        return 1
 
 
 def cmd_workflows_schedule(args: argparse.Namespace) -> int:
@@ -742,6 +791,15 @@ def main(argv: list[str] | None = None) -> int:
     p_inspect = p_graph_sub.add_parser("inspect", help="estatísticas e nós")
     p_inspect.add_argument("--type", default=None, help="filtrar por tipo de nó")
     p_inspect.set_defaults(func=cmd_graph_inspect)
+
+    p_models = sub.add_parser("models", help="model providers (spec §35 / SPEC-039)")
+    p_models_sub = p_models.add_subparsers(dest="models_action", required=True)
+    p_models_sub.add_parser("info", help="show configured provider/model").set_defaults(
+        func=cmd_models_info
+    )
+    p_models_sub.add_parser("test", help="live connectivity test").set_defaults(
+        func=cmd_models_test
+    )
 
     p_research = sub.add_parser("research", help="research engine (SPEC-021)")
     p_research_sub = p_research.add_subparsers(dest="research_action", required=True)

@@ -696,17 +696,21 @@ class ResearchRepository:
     def insert(self, research_id: str, question: str, status: str, plan: list[str],
                sources: list[dict[str, Any]], extractions: list[dict[str, Any]],
                synthesis: str, insights: list[dict[str, Any]],
-               opportunities: list[dict[str, Any]], trace_id: str | None = None) -> None:
+               opportunities: list[dict[str, Any]], trace_id: str | None = None,
+               model: str | None = None, provider: str | None = None,
+               mock: bool = True) -> None:
         with self._db.conn_checked:
             self._db.conn_checked.execute(
                 "INSERT INTO research (id, workspace_id, question, status, plan, sources,"
-                " extractions, synthesis, insights, opportunities, trace_id, created_at)"
-                " VALUES (?, 'default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " extractions, synthesis, insights, opportunities, trace_id, model,"
+                " provider, mock, created_at)"
+                " VALUES (?, 'default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (research_id, question, status, json.dumps(plan, ensure_ascii=False),
                  json.dumps(sources, ensure_ascii=False),
                  json.dumps(extractions, ensure_ascii=False), synthesis,
                  json.dumps(insights, ensure_ascii=False),
-                 json.dumps(opportunities, ensure_ascii=False), trace_id, now_iso()),
+                 json.dumps(opportunities, ensure_ascii=False), trace_id, model,
+                 provider, 1 if mock else 0, now_iso()),
             )
 
     def get(self, research_id: str) -> dict[str, Any] | None:

@@ -1,8 +1,10 @@
 """Research engine (SPEC-021): deterministic pipeline over the local knowledge base.
 
 QUESTION → PLAN → SOURCES → EXTRACTION → SYNTHESIS → INSIGHT → KNOWLEDGE.
-Sources are real (local index, with provenance); synthesis is a deterministic template
-marked `mock: True` until a ModelProvider exists. Never invents facts.
+Sources are real (local index, with provenance). Synthesis is a deterministic template
+marked `mock: True` by default; when a ModelProvider is configured, synthesis is
+LLM-generated strictly from the retrieved sources (with citations), marked with the
+model name and `mock: False`. Never invents facts (spec §56).
 """
 
 from __future__ import annotations
@@ -11,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..core.events import SqliteEventBus
+from ..core.models import ModelError, ModelProvider
 from ..intelligence.retrieval import HybridRetriever, RetrievalConfig, tokens_estimate
 from ..storage.database import Database
 from ..storage.repos import RepoFactory
@@ -51,6 +54,8 @@ class ResearchReport:
     opportunities: list[dict[str, Any]]
     mock: bool = True
     empty: bool = False
+    model: str | None = None
+    provider: str | None = None
     created_at: str = field(default_factory=now_iso)
 
     def to_dict(self) -> dict[str, Any]:
@@ -59,24 +64,40 @@ class ResearchReport:
             "plan": self.plan, "sources": [s.to_dict() for s in self.sources],
             "extractions": self.extractions, "synthesis": self.synthesis,
             "insights": self.insights, "opportunities": self.opportunities,
-            "mock": self.mock, "empty": self.empty, "created_at": self.created_at,
+            "mock": self.mock, "empty": self.empty, "model": self.model,
+            "provider": self.provider, "created_at": self.created_at,
         }
+
+
+_SYNTHESIS_SYSTEM_PROMPT = (
+    "Você é o motor de síntese de pesquisa do GEOS. Sua tarefa: responder à pergunta "
+    "do usuário EXCLUSIVAMENTE com base nas fontes fornecidas (marcadas [F1], [F2], ...). "
+    "Regras: (1) não invente fatos, números ou citações que não estejam nas fontes; "
+    "(2) use a linguagem da pergunta (PT-BR por padrão); (3) cite a fonte ao fim de cada "
+    "afirmação no formato [F#]; (4) se as fontes não cobrem a pergunta, diga explicitamente "
+    "o que não foi possível responder; (5) responda em parágrafos curtos, sem listas "
+    "intermináveis; (6) nunca atribua causalidade sem evidência nas fontes."
+)
 
 
 class ResearchEngine:
     def __init__(self, db: Database, sources_limit: int = 5,
-                 retriever: HybridRetriever | None = None) -> None:
+                 retriever: HybridRetriever | None = None,
+                 model_provider: ModelProvider | None = None) -> None:
         self._db = db
         self._repo = RepoFactory(db)
         self._sources_limit = sources_limit
         self._retriever = retriever or HybridRetriever(db, config=RetrievalConfig())
+        self._model_provider = model_provider
 
     def run(self, question: str, sources_limit: int | None = None,
-            trace_id: str | None = None) -> ResearchReport:
+            trace_id: str | None = None,
+            model_provider: ModelProvider | None = None) -> ResearchReport:
         question = question.strip()
         if not question:
             raise ValueError("question is required")
         limit = sources_limit or self._sources_limit
+        provider = model_provider if model_provider is not None else self._model_provider
 
         hits = self._retriever.search(question, limit=limit)
         sources = [
@@ -90,11 +111,18 @@ class ResearchEngine:
         ]
 
         empty = not sources
+        mock = True
+        model: str | None = None
+        model_provider_name: str | None = None
         if empty:
             synthesis = (
                 f"Síntese determinística (mock) para '{question}': o índice local não "
                 "retornou fontes — nenhuma fonte foi inventada. Indexe conhecimento com "
                 "`geos knowledge ingest` antes de reexecutar."
+            )
+        elif provider is not None:
+            synthesis, mock, model, model_provider_name = self._synthesize(
+                provider, question, sources
             )
         else:
             bullets = "\n".join(f"- {s.title} ({s.uri})" for s in sources)
@@ -137,10 +165,44 @@ class ResearchEngine:
         report = ResearchReport(
             id=new_id(), question=question, status="COMPLETED", plan=list(_PLAN_TEMPLATE),
             sources=sources, extractions=extractions, synthesis=synthesis,
-            insights=insights, opportunities=opportunities, mock=True, empty=empty,
+            insights=insights, opportunities=opportunities, mock=mock, empty=empty,
+            model=model, provider=model_provider_name,
         )
         self._persist(report, trace_id)
         return report
+
+    def _synthesize(self, provider: ModelProvider, question: str,
+                    sources: list[ResearchSource]) -> tuple[str, bool, str, str]:
+        """LLM synthesis grounded strictly in the retrieved sources. On any model
+        failure, falls back to the deterministic mock (research must not fail)."""
+        context = "\n\n".join(
+            f"[F{i + 1}] {s.title} ({s.uri})\n{s.snippet}"
+            for i, s in enumerate(sources)
+        )
+        user_prompt = (
+            f"Pergunta: {question}\n\n"
+            f"Fontes:\n{context}\n\n"
+            "Síntese (com citações [F#] e indicação explícita do que não foi possível "
+            "responder):"
+        )
+        try:
+            response = provider.complete(_SYNTHESIS_SYSTEM_PROMPT, user_prompt,
+                                         temperature=0.2)
+            synthesis = response.text.strip()
+            if not synthesis:
+                raise ModelError("model returned empty synthesis")
+        except ModelError:
+            # SPEC-039 R3: provider failure must never fail the research — the
+            # deterministic mock (honest, no invented content) takes over.
+            return (
+                f"Síntese determinística (mock) para '{question}' — o ModelProvider "
+                "falhou e o GEOS não fabricou conteúdo em seu lugar. As fontes abaixo "
+                "podem ser usadas para síntese manual:\n"
+                + "\n".join(f"- {s.title} ({s.uri})" for s in sources),
+                True, None, None,
+            )
+        meta = provider.metadata()
+        return synthesis, False, response.model, str(meta.get("provider") or "unknown")
 
     def _persist(self, report: ResearchReport, trace_id: str | None) -> None:
         self._repo.research.insert(
@@ -149,7 +211,8 @@ class ResearchEngine:
             sources=[s.to_dict() for s in report.sources],
             extractions=report.extractions, synthesis=report.synthesis,
             insights=report.insights, opportunities=report.opportunities,
-            trace_id=trace_id,
+            trace_id=trace_id, model=report.model, provider=report.provider,
+            mock=report.mock,
         )
         for insight in report.insights:
             insight_id = new_id()

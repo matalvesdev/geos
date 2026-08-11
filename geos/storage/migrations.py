@@ -223,6 +223,15 @@ CREATE INDEX IF NOT EXISTS idx_insights_type ON insights(insight_type);
 """
 
 
+V4_MODEL_PROVENANCE = """
+-- Additive provenance for LLM-generated synthesis (SPEC-039): model, provider,
+-- and mock flag on research rows. Safe ALTERs (no rewrite of existing data).
+ALTER TABLE research ADD COLUMN model TEXT;
+ALTER TABLE research ADD COLUMN provider TEXT;
+ALTER TABLE research ADD COLUMN mock INTEGER NOT NULL DEFAULT 1;
+"""
+
+
 V3_CONTENT_PHASE2 = """
 CREATE TABLE IF NOT EXISTS content (
   id TEXT PRIMARY KEY,
@@ -275,6 +284,7 @@ MIGRATIONS: list[tuple[int, str, str]] = [
     (1, "bootstrap", V1_BOOTSTRAP),
     (2, "knowledge_phase1", V2_KNOWLEDGE_PHASE1),
     (3, "content_phase2", V3_CONTENT_PHASE2),
+    (4, "model_provenance", V4_MODEL_PROVENANCE),
 ]
 
 MAX_VERSION = max(v for v, _, _ in MIGRATIONS)
