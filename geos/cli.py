@@ -12,6 +12,7 @@ from pathlib import Path
 from . import __version__
 from .config import ConfigError, Settings
 from .update import cmd_update, get_current_version, check_for_updates
+from .menu import cmd_menu
 from .formatting import (
     heading, subheading, value, label, key, dim, bold, success, error, warning, info,
     status_ok, status_warn, status_error, status_info, status_arrow,
@@ -1516,6 +1517,13 @@ def main(argv: list[str] | None = None) -> int:
     p_update.add_argument("--pip", action="store_true",
                           help="use pip install from PyPI instead of GitHub")
     p_update.set_defaults(func=cmd_update)
+
+    p_menu = sub.add_parser("menu", help="show all available commands")
+    p_menu.add_argument("command", nargs="?", default=None,
+                        help="show help for specific command")
+    p_menu.add_argument("--list", action="store_true",
+                        help="flat list of all commands")
+    p_menu.set_defaults(func=cmd_menu)
 
     p_bootstrap = sub.add_parser("bootstrap",
                                  help="SPEC-103: scaffold greenfield workspace")
