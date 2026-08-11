@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "geos"
-version = "0.8.0"
+version = "0.9.0"
 description = "GEOS — Growth, Education & Organizational System. Local-first agentic organizational growth platform."
 readme = "README.md"
 requires-python = ">=3.11"

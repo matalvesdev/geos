@@ -402,6 +402,23 @@ def cmd_approvals_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_approvals_decide(args: argparse.Namespace) -> int:
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        from .core.approvals import ApprovalEngine
+
+        approval = ApprovalEngine(db, settings.approvals).decide(
+            args.approval_id, args.decision, args.by or "cli")
+        print(f"{approval.id}: {approval.status} (decision={approval.decision} "
+              f"by={approval.decided_by})")
+        print("  automations (e.g. `geos social worker`) podem executar agora.")
+    finally:
+        db.close()
+    return 0
+
+
 def cmd_plan(args: argparse.Namespace) -> int:
     """EXPERIMENTAL (SPEC-106): recommendation view from the last audit manifest."""
     root = Path(args.root).resolve()
@@ -971,6 +988,58 @@ def cmd_blog_publish(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_analytics_collect(args: argparse.Namespace) -> int:
+    from .domains.analytics import AnalyticsEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        result = AnalyticsEngine(db).collect()
+        print(f"analytics: snapshot {result['snapshot_id']} | "
+              f"{result['summary']['count']} métricas | "
+              f"{len(result['insights'])} insight(s)")
+        for insight in result["insights"]:
+            print(f"  [{insight['insight_type']:13s}] {insight['content']}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_analytics_metrics(args: argparse.Namespace) -> int:
+    from .domains.analytics import AnalyticsEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        metrics = AnalyticsEngine(db).metrics(domain=args.domain)
+        print(f"{len(metrics)} métrica(s)" + (f" (domínio: {args.domain})" if args.domain else ""))
+        for name, value in sorted(metrics.items()):
+            print(f"  {name:28s} {value}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_analytics_insights(args: argparse.Namespace) -> int:
+    from .domains.analytics import AnalyticsEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        insights = AnalyticsEngine(db).insights(insight_type=args.type)
+        print(f"{len(insights)} insight(s)" + (f" ({args.type})" if args.type else ""))
+        for insight in insights[: args.limit]:
+            print(f"  [{insight['insight_type']:13s}] {insight['content']}")
+            if insight.get("evidence"):
+                print(f"      evidência: {insight['evidence']}")
+    finally:
+        db.close()
+    return 0
+
+
 def cmd_social_prepare(args: argparse.Namespace) -> int:
     from .domains.social import SocialEngine
 
@@ -1025,6 +1094,25 @@ def cmd_social_due(args: argparse.Namespace) -> int:
         for post in posts:
             print(f"  {post['id']} {post['channel']:10s} {post['slug'][:40]}"
                   f" scheduled_at={post.get('scheduled_at')}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_social_worker(args: argparse.Namespace) -> int:
+    """Execute pre-approved, due social posts (SPEC-025 R4, L3 APPROVED)."""
+    from .domains.social import SocialEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        result = SocialEngine(db, approvals=settings.approvals).worker()
+        print(f"social worker: publicados={result['published']} "
+              f"aguardando={result['waiting']}")
+        if result["waiting"]:
+            print("  aguardando: aprovação humana pendente ou janela futura — "
+                  "use `geos approvals list` + `approvals decide`")
     finally:
         db.close()
     return 0
@@ -1238,6 +1326,12 @@ def main(argv: list[str] | None = None) -> int:
     p_approvals_sub.add_parser("list", help="list pending approvals").set_defaults(
         func=cmd_approvals_list
     )
+    p_adecide = p_approvals_sub.add_parser("decide",
+                                           help="decidir um approval (habilita worker)")
+    p_adecide.add_argument("approval_id")
+    p_adecide.add_argument("decision", choices=["approve", "reject"])
+    p_adecide.add_argument("--by", default=None, help="quem decidiu (default: cli)")
+    p_adecide.set_defaults(func=cmd_approvals_decide)
 
     p_blog = sub.add_parser("blog", help="blog publisher (SPEC-024)")
     p_blog_sub = p_blog.add_subparsers(dest="blog_action", required=True)
@@ -1256,6 +1350,20 @@ def main(argv: list[str] | None = None) -> int:
                             help="registrar decisão humana e publicar")
     p_bpublish.add_argument("--by", default=None, help="quem aprovou (default: cli)")
     p_bpublish.set_defaults(func=cmd_blog_publish)
+
+    p_analytics = sub.add_parser("analytics", help="analytics engine (SPEC-035)")
+    p_analytics_sub = p_analytics.add_subparsers(dest="analytics_action", required=True)
+    p_analytics_sub.add_parser("collect", help="coletar snapshot de métricas + insights"
+                               ).set_defaults(func=cmd_analytics_collect)
+    p_ametrics = p_analytics_sub.add_parser("metrics", help="últimas métricas (por domínio)")
+    p_ametrics.add_argument("--domain", default=None,
+                            help="content|blog|social|seo|growth|research|telemetry")
+    p_ametrics.set_defaults(func=cmd_analytics_metrics)
+    p_ainsights = p_analytics_sub.add_parser("insights", help="insights persistidos")
+    p_ainsights.add_argument("--type", default=None,
+                             choices=["OBSERVATION", "HYPOTHESIS", "INVESTIGATION"])
+    p_ainsights.add_argument("--limit", type=int, default=30)
+    p_ainsights.set_defaults(func=cmd_analytics_insights)
 
     p_social = sub.add_parser("social", help="social scheduler (SPEC-025)")
     p_social_sub = p_social.add_subparsers(dest="social_action", required=True)
@@ -1282,6 +1390,9 @@ def main(argv: list[str] | None = None) -> int:
                             help="registrar decisão humana e publicar")
     p_spublish.add_argument("--by", default=None, help="quem aprovou (default: cli)")
     p_spublish.set_defaults(func=cmd_social_publish)
+    p_sworker = p_social_sub.add_parser("worker",
+                                        help="executar posts pré-aprovados vencidos (L3)")
+    p_sworker.set_defaults(func=cmd_social_worker)
 
     p_content = sub.add_parser("content", help="content engine (SPEC-022)")
     p_content_sub = p_content.add_subparsers(dest="content_action", required=True)

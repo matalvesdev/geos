@@ -295,6 +295,123 @@ class PublishTests(unittest.TestCase):
                 engine.schedule(post["id"], "2099-01-01T09:00:00+00:00")
 
 
+class WorkerTests(unittest.TestCase):
+    """SPEC-025 R4: worker executes only pre-approved, due posts (L3 APPROVED)."""
+
+    def setUp(self) -> None:
+        self.db = temp_db()
+        self.engine = SocialEngine(self.db)
+
+    def tearDown(self) -> None:
+        self.db.close()
+
+    def test_worker_does_nothing_without_human_approval(self) -> None:
+        """No pre-decided approval → worker must never write (spec §47)."""
+        content_id = _approved_content(self.db)
+        with TempDir() as tmp:
+            engine = SocialEngine(self.db, publish_dir=str(tmp))
+            post = engine.prepare(content_id, channel="x")
+            engine.publish(post["id"])  # APPROVAL_PENDING, no decision
+            result = engine.worker()
+            self.assertEqual(result, {"published": 0, "waiting": 1})
+            self.assertFalse(list(tmp.glob("*.txt")))
+
+    def test_worker_publishes_approved_immediate_post(self) -> None:
+        content_id = _approved_content(self.db)
+        with TempDir() as tmp:
+            engine = SocialEngine(self.db, publish_dir=str(tmp))
+            post = engine.prepare(content_id, channel="x")
+            gated = engine.publish(post["id"])  # creates PENDING approval
+            from geos.core.approvals import ApprovalEngine
+
+            ApprovalEngine(self.db).decide(gated["approval_id"], "approve", "editor")
+            result = engine.worker()
+            self.assertEqual(result, {"published": 1, "waiting": 0})
+            self.assertTrue(list(tmp.glob("*.txt")))
+            self.assertEqual(engine.get(post["id"])["status"], "PUBLISHED")
+
+    def test_worker_publishes_approved_due_scheduled_post(self) -> None:
+        content_id = _approved_content(self.db)
+        with TempDir() as tmp:
+            engine = SocialEngine(self.db, publish_dir=str(tmp))
+            post = engine.prepare(content_id, channel="x",
+                                  scheduled_at="2099-01-01T00:00:00+00:00")
+            queued = engine.publish(post["id"], approve=True)  # SCHEDULED
+            self.assertEqual(queued["status"], "SCHEDULED")
+            from geos.core.approvals import ApprovalEngine
+
+            # human approves; time passes; worker executes
+            ApprovalEngine(self.db).decide(queued["approval_id"], "approve", "editor")
+            engine.schedule(post["id"], "2000-01-01T00:00:00+00:00")
+            result = engine.worker()
+            self.assertEqual(result, {"published": 1, "waiting": 0})
+            self.assertTrue(list(tmp.glob("*.txt")))
+
+    def test_worker_skips_future_scheduled_posts(self) -> None:
+        content_id = _approved_content(self.db)
+        post = self.engine.prepare(content_id, channel="x",
+                                   scheduled_at="2099-01-01T00:00:00+00:00")
+        queued = self.engine.publish(post["id"], approve=True)
+        from geos.core.approvals import ApprovalEngine
+
+        ApprovalEngine(self.db).decide(queued["approval_id"], "approve", "editor")
+        result = self.engine.worker()
+        self.assertEqual(result, {"published": 0, "waiting": 1},
+                         "future window must not be executed early")
+
+    def test_worker_skips_rejected_approvals(self) -> None:
+        content_id = _approved_content(self.db)
+        with TempDir() as tmp:
+            engine = SocialEngine(self.db, publish_dir=str(tmp))
+            post = engine.prepare(content_id, channel="x")
+            gated = engine.publish(post["id"])
+            from geos.core.approvals import ApprovalEngine
+
+            ApprovalEngine(self.db).decide(gated["approval_id"], "reject", "editor")
+            result = engine.worker()
+            self.assertEqual(result, {"published": 0, "waiting": 1})
+            self.assertFalse(list(tmp.glob("*.txt")))
+
+    def test_worker_counts_future_window_as_waiting_not_published(self) -> None:
+        """Regression (review): APPROVAL_PENDING post with a future scheduled_at
+        must not be counted as published nor written early."""
+        content_id = _approved_content(self.db)
+        with TempDir() as tmp:
+            engine = SocialEngine(self.db, publish_dir=str(tmp))
+            post = engine.prepare(content_id, channel="x",
+                                  scheduled_at="2099-01-01T00:00:00+00:00")
+            gated = engine.publish(post["id"])  # APPROVAL_PENDING + future window
+            from geos.core.approvals import ApprovalEngine
+
+            ApprovalEngine(self.db).decide(gated["approval_id"], "approve", "editor")
+            result = engine.worker()
+            self.assertEqual(result, {"published": 0, "waiting": 1},
+                             "future window must not count as published")
+            # worker never touched it (window not due) — still APPROVAL_PENDING
+            self.assertEqual(engine.get(post["id"])["status"], "APPROVAL_PENDING")
+            self.assertFalse(list(tmp.glob("*.txt")))
+
+    def test_real_adapter_failure_marks_post_failed(self) -> None:
+        """Regression (review): ChannelAdapterError (not OSError) must mark the
+        post FAILED and keep the approval PENDING (SPEC-025 contract)."""
+        from geos.domains.social_adapters import (ChannelAdapterError,
+                                                  register_default_adapters)
+
+        content_id = _approved_content(self.db)
+        with TempDir() as tmp:
+            engine = SocialEngine(self.db, publish_dir=str(tmp))
+            post = engine.prepare(content_id, channel="x")
+            engine._repo.social.update(post["id"], adapter="x_api")
+            # no GEOS_X_BEARER_TOKEN configured → ChannelAdapterError
+            with self.assertRaises(SocialError):
+                engine.publish(post["id"], approve=True)
+            failed = engine.get(post["id"])
+            self.assertEqual(failed["status"], "FAILED")
+            approval = SocialEngine(self.db)._repo.approvals.get(
+                failed["approval_id"])
+            self.assertEqual(approval.status, "PENDING")  # type: ignore[union-attr]
+
+
 class AdapterTests(unittest.TestCase):
     def test_local_adapter_default(self) -> None:
         self.assertEqual(get_adapter("local").name, "local")

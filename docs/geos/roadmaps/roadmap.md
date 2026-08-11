@@ -65,7 +65,7 @@ provider falhar, cai para o mock (nunca fabrica conteúdo).
 | Opportunity + Experiment Engine (collect research+SEO, ICE/RICE explicável, lifecycle validado) | SPEC-034 | ✅ IMPLEMENTED + TESTED (CLI `opportunities`/`experiments`) |
 | Blog Publisher (markdown + front matter, adapters local/CMS, aprovação humana obrigatória) | SPEC-024 | ✅ IMPLEMENTED + TESTED (CLI `blog prepare/publish`, `content draft`) |
 | Social Scheduler (human-approval gated, posts determinísticos por canal, agendamento) | SPEC-025 | ✅ IMPLEMENTED + TESTED (CLI `social prepare/list/due/publish`, migration V8) |
-| Analytics (AnalyticsProvider + metric registry + insights OBSERVATION/HYPOTHESIS/INVESTIGATION) | SPEC-035 | PLANNED |
+| Analytics (AnalyticsProvider + metric registry + insights OBSERVATION/HYPOTHESIS/INVESTIGATION) | SPEC-035 | ✅ IMPLEMENTED + TESTED (CLI `analytics collect/metrics/insights`, migration V9) |
 
 Automations: `daily-growth-intelligence` (SPEC-143), `weekly-content`, `weekly-growth-review`,
 changelog/release automation (SPEC-148) — all behind approvals and feature flags.

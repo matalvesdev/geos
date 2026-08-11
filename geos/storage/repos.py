@@ -1200,6 +1200,71 @@ class BlogRepository:
             )
 
 
+class AnalyticsRepository:
+    """Metric snapshots + deterministic insights (SPEC-035). History preserved."""
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def create_snapshot(self, metrics: dict[str, Any],
+                        summary: dict[str, Any]) -> str:
+        snapshot_id = new_id()
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO metric_snapshots (id, workspace_id, run_at, metrics, summary)"
+                " VALUES (?, 'default', ?, ?, ?)",
+                (snapshot_id, now_iso(),
+                 json.dumps(metrics, ensure_ascii=False),
+                 json.dumps(summary, ensure_ascii=False)),
+            )
+        return snapshot_id
+
+    def insert_insight(self, snapshot_id: str, insight_type: str, content: str,
+                       severity: str, evidence: str | None,
+                       confidence: float | None) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO analytics_insights (id, workspace_id, snapshot_id,"
+                " insight_type, severity, content, evidence, confidence, created_at)"
+                " VALUES (?, 'default', ?, ?, ?, ?, ?, ?, ?)",
+                (new_id(), snapshot_id, insight_type, severity, content, evidence,
+                 confidence, now_iso()),
+            )
+
+    def latest_snapshot(self) -> dict[str, Any] | None:
+        row = self._db.conn_checked.execute(
+            "SELECT * FROM metric_snapshots ORDER BY run_at DESC LIMIT 1"
+        ).fetchone()
+        if row is None:
+            return None
+        item = dict(row)
+        for key in ("metrics", "summary"):
+            try:
+                item[key] = json.loads(item[key] or "{}")
+            except json.JSONDecodeError:
+                item[key] = {}
+        return item
+
+    def list_snapshots(self, limit: int = 20) -> list[dict[str, Any]]:
+        rows = self._db.conn_checked.execute(
+            "SELECT id, run_at FROM metric_snapshots ORDER BY run_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def insights(self, insight_type: str | None = None, limit: int = 100
+                 ) -> list[dict[str, Any]]:
+        q = "SELECT * FROM analytics_insights"
+        params: list[Any] = []
+        if insight_type:
+            q += " WHERE insight_type = ?"
+            params.append(insight_type)
+        q += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        rows = self._db.conn_checked.execute(q, params).fetchall()
+        return [dict(r) for r in rows]
+
+
 class SocialPostRepository:
     """Social posts (SPEC-025): deterministic per-channel posts gated by
     human approval. One post per (content_id, channel); FAILED posts may be
@@ -1336,6 +1401,7 @@ class RepoFactory:
         self.experiments = ExperimentRepository(db)
         self.blog = BlogRepository(db)
         self.social = SocialPostRepository(db)
+        self.analytics = AnalyticsRepository(db)
 
 
 def _fts_query(query: str) -> str:

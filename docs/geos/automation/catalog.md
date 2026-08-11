@@ -14,7 +14,7 @@
 | A-004 | lead-signal-capture | Leads | events | form/event → lead + signal | LeadIntelligenceAgent | none (internal) | leads, signals | PLANNED |
 | A-005 | content-draft | Content | event/CLI | research → brief → draft | ResearchAgent, WriterAgent | CREATE_DRAFT = automatic | drafts | PLANNED |
 | A-006 | blog-publish | Content | approval | draft → CMS | BlogAgent | HUMAN_APPROVAL_REQUIRED | published | PLANNED |
-| A-007 | social-publish | Social | approval | draft → channel | SocialAgent | HUMAN_APPROVAL_REQUIRED | posts, reach | ✅ IMPLEMENTED (v0.8.0, SPEC-025: posts determinísticos por canal + agendamento; adapters reais de API em fases futuras) |
+| A-007 | social-publish | Social | approval | draft → channel | SocialAgent | HUMAN_APPROVAL_REQUIRED | posts, reach | ✅ IMPLEMENTED (v0.8.0, SPEC-025) — L3 desde v0.9.0: `social worker` executa pré-aprovados |
 | A-008 | meeting-invite | Meetings | qualification | lead → slots → calendar | MeetingAgent | HUMAN_APPROVAL_REQUIRED | meetings | PLANNED |
 | A-009 | newsletter-send | Email | schedule | digest → ESP | NewsletterAgent | HUMAN_APPROVAL_REQUIRED | opens | PLANNED |
 | A-010 | research-run | Research | CLI/event | question → report+insights (mock) | ResearchAgent (determinístico) | none (read-only) | research rows, insights | ✅ IMPLEMENTED |
@@ -33,6 +33,8 @@
 | A-023 | social-prepare | Social | CLI `geos social prepare` | conteúdo APPROVED/SCHEDULED → post determinístico por canal (+ opcional `--at`) | SocialEngine (SPEC-025) | none (read-only) | social_posts | ✅ IMPLEMENTED (v0.8.0) |
 | A-024 | social-schedule | Social | CLI `geos social due` / `schedule` | agendamento → fila SCHEDULED → vencidos listados | SocialEngine (SPEC-025 R4) | none (read-only; escrita exige publish aprovado) | scheduled_at, due | ✅ IMPLEMENTED (v0.8.0) |
 | A-025 | social-publish | Social | CLI `geos social publish [--approve]` | post → arquivo por canal (adapter) — **aprovação humana obrigatória** | SocialEngine + ApprovalEngine (SPEC-025, `social.publish` = HUMAN_APPROVAL_REQUIRED) | write local (adapter), gated | path, approval | ✅ IMPLEMENTED (v0.8.0) |
+| A-026 | analytics-collect | Analytics | CLI `geos analytics collect` | estado local → snapshot de métricas + insights | AnalyticsEngine (SPEC-035) | none (read-only) | snapshots, insights | ✅ IMPLEMENTED (v0.9.0) |
+| A-027 | social-worker | Social | CLI `geos social worker` | posts pré-aprovados + vencidos → publish | SocialEngine.worker (SPEC-025 R4, L3) | write local (adapter), somente pré-aprovados | published, waiting | ✅ IMPLEMENTED (v0.9.0) |
 
 ## Failure modes (all automations)
 

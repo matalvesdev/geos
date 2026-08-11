@@ -270,6 +270,13 @@ class SocialEngine:
     # ---- publish (approval-gated, SPEC-025 R1/R3) ---------------------------
     def publish(self, post_id: str, approve: bool = False,
                 decided_by: str = "cli") -> dict[str, Any]:
+        """Publish a social post.
+
+        Gate (SPEC-025 R1): an external write happens only when there is a human
+        decision — either the caller decides now (`approve=True`, decided by
+        `decided_by`) or the linked approval was already decided APPROVED (via
+        `geos approvals decide`), which lets the worker execute approved posts.
+        """
         post = self.get(post_id)
         if post["status"] == "PUBLISHED":
             raise SocialError(
@@ -279,8 +286,8 @@ class SocialEngine:
         approval_id = post.get("approval_id")
         if approval_id:
             existing = approvals.get(approval_id)
-            if existing is not None and existing.status == "PENDING":
-                pass  # reuse the open request (no approval-queue spam)
+            if existing is not None and existing.status in ("PENDING", "APPROVED"):
+                pass  # reuse: open request, or a decision the worker may execute
             else:
                 approval_id = None
         if approval_id is None:
@@ -290,8 +297,9 @@ class SocialEngine:
                           "content_id": post.get("content_id")},
             )
             approval_id = approval.id
-        # Gate: no approval decision → nothing external happens (SPEC-025 R1).
-        if not approve:
+        current = approvals.get(approval_id)
+        # Gate: no decision yet and nobody is deciding now → nothing external.
+        if not approve and current is not None and current.status == "PENDING":
             self._repo.social.update(post_id, status="APPROVAL_PENDING",
                                      approval_id=approval_id)
             return self.get(post_id)
@@ -300,15 +308,20 @@ class SocialEngine:
             self._repo.social.update(post_id, status="SCHEDULED",
                                      approval_id=approval_id)
             return self.get(post_id)
-        # Decision recorded only AFTER a successful adapter write.
+        # Decision recorded only AFTER a successful adapter write. Real channel
+        # adapters raise ChannelAdapterError (a SocialError), the local adapter
+        # raises OSError — both mark the post FAILED (SPEC-025 contract).
         try:
             adapter = get_adapter(post.get("adapter") or "local",
                                   post.get("publish_dir"))
             result = adapter.publish(post)
-        except OSError as exc:
+        except (OSError, SocialError) as exc:
             self._repo.social.update(post_id, status="FAILED", approval_id=approval_id)
             raise SocialError(f"publish adapter failed: {exc}") from exc
-        self._repo.approvals.decide(approval_id, "approve", decided_by)
+        # Decide only if this call is the deciding authority (worker executes an
+        # already-APPROVED decision without re-deciding).
+        if current is not None and current.status == "PENDING":
+            self._repo.approvals.decide(approval_id, "approve", decided_by)
         self._repo.social.update(
             post_id, status="PUBLISHED", published_path=result.path,
             published_url=result.url,
@@ -325,6 +338,38 @@ class SocialEngine:
             pass
         return self.get(post_id)
 
+    # ---- worker (SPEC-025 R4: executes pre-approved, due posts) ------------
+    def worker(self, limit: int = 100) -> dict[str, int]:
+        """Publish posts that a human already approved and whose window is due.
+
+        Read-only on decisions: never requests nor decides an approval — only
+        executes APPROVED ones (spec §47, L3 AUTOMATED + APPROVAL). Counts
+        published only when the post actually reaches PUBLISHED (a post whose
+        window is still future is queued, not counted).
+        """
+        published = 0
+        waiting = 0
+        now = now_iso()
+        for post in self.list(status="APPROVAL_PENDING", limit=limit) + \
+                self.list(status="SCHEDULED", limit=limit):
+            approval_id = post.get("approval_id")
+            approval = (self._repo.approvals.get(approval_id)
+                        if approval_id else None)
+            scheduled_at = post.get("scheduled_at")
+            is_due = (scheduled_at is None or scheduled_at <= now)
+            if approval is not None and approval.status == "APPROVED" and is_due:
+                try:
+                    result = self.publish(post["id"])
+                    if result["status"] == "PUBLISHED":
+                        published += 1
+                    else:
+                        waiting += 1  # queued (future window) or still pending
+                except SocialError:
+                    waiting += 1  # adapter failure or rejected decision
+            else:
+                waiting += 1
+        return {"published": published, "waiting": waiting}
+
 
 # ---------------------------------------------------------------------------
 # Adapter registry (SPEC-025; deterministic, extensible)
@@ -337,6 +382,7 @@ def register_adapter(name: str, adapter_cls: type) -> None:
 
 
 def get_adapter(name: str, publish_dir: str | None = None) -> SocialAdapter:
+    _ensure_real_adapters()
     cls = _ADAPTERS.get(name)
     if cls is None:
         raise SocialError(f"unknown social adapter {name!r} (registered: {sorted(_ADAPTERS)})")
@@ -347,3 +393,12 @@ def get_adapter(name: str, publish_dir: str | None = None) -> SocialAdapter:
     except TypeError:
         # Adapters without a publish_dir constructor arg.
         return cls()
+
+
+# Register the real channel adapters (X/LinkedIn/Bluesky) lazily on first use
+# of the registry, so importing `social` never requires network config.
+def _ensure_real_adapters() -> None:
+    if "x_api" not in _ADAPTERS:
+        from . import social_adapters
+
+        social_adapters.register_default_adapters()

@@ -3,6 +3,50 @@
 Todas as mudanças relevantes do GEOS são registradas aqui (spec §198). Formato
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e versionamento semântico.
 
+## [0.9.0] — 2026-08-11 — Analytics + Social Worker + Channel Adapters
+
+### Added
+
+- **Analytics Engine** (SPEC-035): ~22 métricas determinísticas por domínio
+  (content, blog, social, seo, growth, research, telemetry) computadas sobre o banco
+  local — nunca fabrica dados. Snapshot imutável + histórico (`metric_snapshots`,
+  migration V9) e insights por regra com evidência: `OBSERVATION` (fato),
+  `INVESTIGATION` (follow-up: vencidos, issues críticas, taxa de falha ≥ 10%) e
+  `HYPOTHESIS` (confiança ≤ 0.3 honesta). CLI `geos analytics collect/metrics/insights`.
+- **Worker social real** (SPEC-025 R4, L3 AUTOMATED + APPROVAL): `geos social worker`
+  executa apenas posts **pré-aprovados por humano** e com janela vencida — nunca
+  decide nem pede aprovação (spec §47). Requer `geos approvals decide <id> approve`
+  (novo comando de decisão explícita); `social.publish` reusa approval já APPROVED
+  sem re-decidir.
+- **Adapters reais de canal** (SPEC-025): `x_api` (X API v2 `POST /2/tweets`, Bearer
+  OAuth 2.0 user context), `linkedin_api` (Community Posts API `POST /rest/posts`,
+  `X-Restli-Protocol-Version` + `Linkedin-Version`), `bluesky_api` (AT Protocol
+  createSession + createRecord) — stdlib `urllib`, zero deps, credenciais via env
+  (`GEOS_X_BEARER_TOKEN`, `GEOS_LINKEDIN_BEARER_TOKEN`/`_AUTHOR_URN`,
+  `GEOS_BLUESKY_HANDLE`/`_APP_PASSWORD`), erros tipados `ChannelAdapterError`,
+  fallback honesto para o adapter local quando não configurado.
+- 27 novos testes (235 no total).
+
+### Fixed
+
+- **Falha de adapter real marcava post errado** (revisão): `publish` capturava apenas
+  `OSError`, mas os adapters reais levantam `ChannelAdapterError` (subclasse de
+  `SocialError`) — agora `(OSError, SocialError)` marca o post `FAILED` e mantém o
+  approval PENDING (contrato SPEC-025, antes o post ficava re-tentável para sempre).
+- **Resiliência de métricas** (revisão): métrica que falha vira `None` sem derrubar o
+  run — `_derive_insights` agora tolera `None` (`_int_or_zero`, SPEC-035 R4).
+- **Worker não contava janela futura** (revisão): post `APPROVAL_PENDING`/`SCHEDULED`
+  com `scheduled_at` futuro não era mais contado como publicado nem escrito antes do
+  horário (SPEC-025 R4).
+- **Rejeição**: o worker só executa approvals `APPROVED`; rejeitar bloqueia execução
+  automática. Republicar com `--approve` após rejeição cria um novo approval
+  (override humano explícito).
+
+### Changed
+
+- README (232 testes, features analytics/worker/adapters), roadmap SPEC-035 ✅,
+  catálogo de automações (A-007 social-publish L3, A-026 analytics, A-027 worker).
+
 ## [0.8.0] — 2026-08-11 — Social Scheduler (SPEC-025)
 
 ### Added

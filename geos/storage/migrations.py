@@ -360,6 +360,32 @@ CREATE INDEX IF NOT EXISTS idx_content_versions_content ON content_versions(cont
 """
 
 
+V9_ANALYTICS = """
+CREATE TABLE IF NOT EXISTS metric_snapshots (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  run_at TEXT NOT NULL,
+  metrics TEXT NOT NULL,
+  summary TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_metric_snapshots_run ON metric_snapshots(run_at);
+
+CREATE TABLE IF NOT EXISTS analytics_insights (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  snapshot_id TEXT REFERENCES metric_snapshots(id) ON DELETE CASCADE,
+  insight_type TEXT NOT NULL,
+  severity TEXT NOT NULL DEFAULT 'info',
+  content TEXT NOT NULL,
+  evidence TEXT,
+  confidence REAL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_analytics_insights_type ON analytics_insights(insight_type);
+CREATE INDEX IF NOT EXISTS idx_analytics_insights_snapshot ON analytics_insights(snapshot_id);
+"""
+
+
 V8_SOCIAL = """
 CREATE TABLE IF NOT EXISTS social_posts (
   id TEXT PRIMARY KEY,
@@ -420,6 +446,7 @@ MIGRATIONS: list[tuple[int, str, str]] = [
     (6, "opportunities_experiments", V6_OPPORTUNITIES),
     (7, "blog_publisher", V7_BLOG),
     (8, "social_scheduler", V8_SOCIAL),
+    (9, "analytics", V9_ANALYTICS),
 ]
 
 MAX_VERSION = max(v for v, _, _ in MIGRATIONS)
