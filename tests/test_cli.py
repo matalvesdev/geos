@@ -169,7 +169,8 @@ class CliTests(unittest.TestCase):
             self.assertTrue(target.is_file())
             self.assertIn("slug:", target.read_text(encoding="utf-8"))
 
-    def test_plan_experimental(self) -> None:
+    def test_plan_spec_106(self) -> None:
+        """SPEC-106: deterministic integration plan from manifest + local state."""
         with TempDir() as tmp:
             (tmp / "services" / "api").mkdir(parents=True)
             (tmp / "services" / "api" / "A.java").write_text("class A {}", encoding="utf-8")
@@ -180,7 +181,25 @@ class CliTests(unittest.TestCase):
             run_cli(tmp, "init")
             plan = run_cli(tmp, "plan")
             self.assertEqual(plan.returncode, 0, plan.stderr)
-            self.assertIn("REUSE", plan.stdout)
+            self.assertIn("GEOS Plan", plan.stdout)
+            self.assertIn("Fundamentos", plan.stdout)
+            self.assertIn("Crescimento", plan.stdout)  # ASCII-safe (Windows cp1252)
+
+    def test_bootstrap_cli(self) -> None:
+        """SPEC-103: geos bootstrap scaffolds a working greenfield workspace."""
+        with TempDir() as tmp:
+            boot = run_cli(tmp, "bootstrap")
+            self.assertEqual(boot.returncode, 0, boot.stderr)
+            self.assertIn("SPEC-103", boot.stdout)
+            self.assertTrue((tmp / "workflows" / "hello.yaml").is_file())
+            self.assertTrue((tmp / "examples" / "docs" / "README.md").is_file())
+            self.assertTrue((tmp / ".geos" / "automations.json").is_file())
+            autos = run_cli(tmp, "automations", "list")
+            self.assertEqual(autos.returncode, 0, autos.stderr)
+            self.assertIn("social-worker", autos.stdout)
+            cc = run_cli(tmp, "control-center", "build")
+            self.assertEqual(cc.returncode, 0, cc.stderr)
+            self.assertTrue((tmp / "control-center.html").is_file())
 
 
 if __name__ == "__main__":

@@ -50,8 +50,10 @@ def cmd_init(args: argparse.Namespace) -> int:
 
     config_path = root / DEFAULT_CONFIG
     if not config_path.is_file():
+        from .discovery.init_defaults import default_config_yaml
+
         config_path.write_text(
-            _default_config_yaml(mode.mode), encoding="utf-8"
+            default_config_yaml(mode.mode), encoding="utf-8"
         )
 
     registry = RepositoryRegistry(root / REGISTRY_PATH)
@@ -114,72 +116,31 @@ def _seed_repositories(root: Path, registry: RepositoryRegistry) -> None:
             )
 
 
-def _default_config_yaml(mode: str) -> str:
-    repositories = ""
-    if mode == "BROWNFIELD":
-        repositories = (
-            "\nrepositories:\n"
-            "  - id: zetra-one\n"
-            "    path: ./zetra-one\n"
-            "    type: PRODUCT\n"
-        )
-    return f"""# GEOS configuration (criado por `geos init`).
-# Estados: CURRENT / PROPOSED / PLANNED — nunca documente como existente o que não existe.
+def cmd_bootstrap(args: argparse.Namespace) -> int:
+    """SPEC-103: scaffold a working greenfield workspace (idempotent)."""
+    from .discovery.bootstrap import bootstrap_workspace
 
-company:
-  name: Example
-
-storage:
-  provider: sqlite
-  mode: isolated
-  path: .geos/geos.db
-
-knowledge:
-  rag: true
-  graph: true
-  # embeddings:
-  #   provider: hash   # hash (determinístico local) | openai (chave via env GEOS_OPENAI_API_KEY)
-  #   options:
-  #     model: text-embedding-3-small
-  #     endpoint: https://api.openai.com/v1/embeddings
-
-# models:
-#   provider: none    # none (síntese mock determinística) | openai (chave via env GEOS_OPENAI_API_KEY)
-#   options:
-#     model: gpt-4o-mini
-#     endpoint: https://api.openai.com/v1/chat/completions
-
-agents:
-  research: true
-  content: true
-  seo: true
-  growth: true
-  leads: true
-  academy: true
-
-automations:
-  daily_intelligence: false
-  weekly_content: false
-  weekly_growth_review: false
-
-approvals:
-  social_publish: required
-  blog_publish: required
-  newsletter_send: required
-  meeting_invite: required
-
-features:
-  rag: true
-  graph: false
-  leads:
-    enabled: false
-    shadow_mode: true
-  social_publish:
-    enabled: false
-  meeting_scheduler:
-    enabled: false
-    shadow_mode: true
-{repositories}"""
+    try:
+        result = bootstrap_workspace(Path(args.root).resolve(), args.config)
+    except Exception as exc:  # noqa: BLE001 - bootstrap must report cleanly
+        print(f"bootstrap error: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    print(f"GEOS Bootstrap v{__version__} (SPEC-103) — workspace: {result['root']}")
+    print(f"  config: {result['config']}")
+    print(f"  workflows copiados: {result['workflows']}")
+    print(f"  docs de exemplo: {result['example_docs']}")
+    print(f"  schema: v{result['schema_version']}")
+    print(f"  knowledge ingest: {result['ingested']}")
+    print(f"  conteúdo seed: {result['content_id']} (APPROVED)")
+    print(f"  automações registradas: {', '.join(result['automations'])}")
+    print(f"  manifest: {result['manifest']}")
+    print("\nPróximos passos:")
+    print("  geos workflows list")
+    print("  geos knowledge search \"cash application\"")
+    print("  geos content list")
+    print("  geos analytics collect")
+    print("  geos doctor")
+    return 0
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
@@ -420,26 +381,111 @@ def cmd_approvals_decide(args: argparse.Namespace) -> int:
 
 
 def cmd_plan(args: argparse.Namespace) -> int:
-    """EXPERIMENTAL (SPEC-106): recommendation view from the last audit manifest."""
+    """SPEC-106: deterministic integration plan from manifest + local state."""
     root = Path(args.root).resolve()
     manifest = load_manifest(root / MANIFEST_PATH)
     if manifest is None:
-        print("no manifest found — run `geos init` first")
+        print("no manifest found — run `geos init` or `geos bootstrap` first")
         return 1
-    print(f"GEOS Plan for mode={manifest.get('mode')} "
-          f"(confidence={manifest.get('mode_confidence')}) [EXPERIMENTAL]")
-    actions = capability_actions()
-    by_action: dict[str, list[str]] = {}
-    for cap in manifest.get("capabilities", []):  # type: ignore[union-attr]
-        action = actions.get(cap["capability"], "INTEGRATE")
-        by_action.setdefault(action, []).append(cap["name"])
-    for action in ("REUSE", "INTEGRATE", "CREATE"):
-        names = by_action.get(action)
-        if names:
-            print(f"\n{action}:")
-            for name in names:
-                print(f"  → {name}")
-    print("\nAdopt gradually: `geos adopt <domain>` (SPEC-103/106 roadmap).")
+
+    from .core.automations import AutomationRegistry
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        # Local state: what GEOS already has (knowledge, content, automations).
+        from .storage.repos import RepoFactory
+
+        repo = RepoFactory(db)
+        docs = len(repo.knowledge.list_documents())
+        content = len(repo.content.list())
+        blog = len(repo.blog.list())
+        social = len(repo.social.list())
+        automations = AutomationRegistry(root / ".geos" / "automations.json").list()
+        # Deterministic phased plan (ADR-0005: shadow mode first, approvals gated).
+        phases: list[tuple[str, list[str]]] = [
+            ("1 · Fundamentos", [
+                "geos doctor  (ambiente + schema)",
+                "geos db migrate  (schema v9)",
+                "geos knowledge ingest docs --source docs  (base de conhecimento)",
+            ]),
+            ("2 · Conhecimento & Research", [
+                "geos graph extract  (nós/arestas determinísticos)",
+                "geos research run \"<pergunta>\"  (síntese mock ou LLM)",
+            ]),
+            ("3 · Conteúdo", [
+                "geos content create \"<tema>\"  (ideia pontuada)",
+                "geos content draft <id>  (rascunho versionado)",
+                "geos content status <id> APPROVED  (revisão humana)",
+            ]),
+            ("4 · Distribuição (aprovação obrigatória)", [
+                "geos blog prepare <id> && geos blog publish <post> --approve",
+                "geos social prepare <id> --channel x|linkedin|bluesky",
+                "geos social publish <post> --approve  (ou approvals decide + worker)",
+            ]),
+            ("5 · Crescimento & Medição", [
+                "geos opportunities collect && geos opportunities score <id>",
+                "geos analytics collect  (snapshot + insights)",
+                "geos automations register  (rotinas agendadas)",
+            ]),
+        ]
+        print(f"GEOS Plan — mode={manifest.get('mode')} "
+              f"(confidence={manifest.get('mode_confidence')})")
+        print(f"Estado local: docs={docs} content={content} blog={blog} "
+              f"social={social} automações={len(automations)}")
+        for title, steps in phases:
+            print(f"\n{title}:")
+            for step in steps:
+                print(f"  → {step}")
+        print("\nPrincípio: shadow mode + aprovação humana antes de qualquer")
+        print("ação externa (ADR-0005); nada documentado sem estar implementado.")
+        return 0
+    finally:
+        db.close()
+
+
+def cmd_automations_register(args: argparse.Namespace) -> int:
+    from .core.automations import (AutomationRegistry, register_default_automations)
+
+    root = Path(args.root).resolve()
+    registry = AutomationRegistry(root / ".geos" / "automations.json")
+    added = register_default_automations(registry)
+    print(f"automações registradas: {len(registry.list())} "
+          f"(novas: {', '.join(added) or 'nenhuma'})")
+    for entry in registry.list():
+        print(f"  {entry.id:22s} cron={entry.cron:16s} kind={entry.kind}")
+    return 0
+
+
+def cmd_automations_list(args: argparse.Namespace) -> int:
+    from .core.automations import AutomationRegistry
+
+    root = Path(args.root).resolve()
+    registry = AutomationRegistry(root / ".geos" / "automations.json")
+    entries = registry.list()
+    print(f"{len(entries)} automação(ões) agendada(s)")
+    for entry in entries:
+        print(f"  {entry.id:22s} cron={entry.cron:16s} kind={entry.kind}")
+    return 0
+
+
+def cmd_automations_run(args: argparse.Namespace) -> int:
+    """Enqueue due schedules and process them (handlers: social.worker,
+    analytics.collect, opportunities.collect, seo.audit, workflow.run)."""
+    from .core.automations import AutomationRegistry, run_automations
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        registry = AutomationRegistry(Path(args.root).resolve() / ".geos"
+                                      / "automations.json")
+        enqueued, processed = run_automations(registry, db,
+                                              approvals=settings.approvals)
+        print(f"automations: enfileirados={enqueued} processados={processed}")
+    finally:
+        db.close()
     return 0
 
 
@@ -988,6 +1034,23 @@ def cmd_blog_publish(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_control_center_build(args: argparse.Namespace) -> int:
+    """SPEC-038: gerar dashboard HTML estático autocontido."""
+    from .domains.control_center import ControlCenter
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        output = args.output or str(Path(args.root) / "control-center.html")
+        path = ControlCenter(db).build(output)
+        print(f"control-center: {path} gerado")
+        print("  abra no navegador (HTML estático, sem servidor).")
+    finally:
+        db.close()
+    return 0
+
+
 def cmd_analytics_collect(args: argparse.Namespace) -> int:
     from .domains.analytics import AnalyticsEngine
 
@@ -1183,6 +1246,10 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("doctor", help="environment + config checks").set_defaults(func=cmd_doctor)
 
+    p_bootstrap = sub.add_parser("bootstrap",
+                                 help="SPEC-103: scaffold greenfield workspace")
+    p_bootstrap.set_defaults(func=cmd_bootstrap)
+
     p_db = sub.add_parser("db", help="database commands")
     p_db_sub = p_db.add_subparsers(dest="db_action", required=True)
     p_db_sub.add_parser("migrate", help="apply pending migrations").set_defaults(func=cmd_db_migrate)
@@ -1351,6 +1418,13 @@ def main(argv: list[str] | None = None) -> int:
     p_bpublish.add_argument("--by", default=None, help="quem aprovou (default: cli)")
     p_bpublish.set_defaults(func=cmd_blog_publish)
 
+    p_cc = sub.add_parser("control-center", help="SPEC-038: dashboard HTML estático")
+    p_cc_sub = p_cc.add_subparsers(dest="control_center_action", required=True)
+    p_cc_build = p_cc_sub.add_parser("build", help="gerar control-center.html")
+    p_cc_build.add_argument("--output", default=None,
+                            help="caminho do HTML (default: <workspace>/control-center.html)")
+    p_cc_build.set_defaults(func=cmd_control_center_build)
+
     p_analytics = sub.add_parser("analytics", help="analytics engine (SPEC-035)")
     p_analytics_sub = p_analytics.add_subparsers(dest="analytics_action", required=True)
     p_analytics_sub.add_parser("collect", help="coletar snapshot de métricas + insights"
@@ -1421,8 +1495,20 @@ def main(argv: list[str] | None = None) -> int:
     p_cshow.add_argument("content_id")
     p_cshow.set_defaults(func=cmd_content_show)
 
-    sub.add_parser("plan", help="EXPERIMENTAL: adoption recommendations from manifest").set_defaults(
+    sub.add_parser("plan", help="SPEC-106: plano de integração determinístico").set_defaults(
         func=cmd_plan
+    )
+
+    p_automations = sub.add_parser("automations", help="rotinas agendadas (SPEC-006)")
+    p_auto_sub = p_automations.add_subparsers(dest="automations_action", required=True)
+    p_auto_sub.add_parser("register", help="registrar automações padrão").set_defaults(
+        func=cmd_automations_register
+    )
+    p_auto_sub.add_parser("list", help="listar automações registradas").set_defaults(
+        func=cmd_automations_list
+    )
+    p_auto_sub.add_parser("run", help="enfileirar vencidas e processar (worker)").set_defaults(
+        func=cmd_automations_run
     )
 
     p_repo = sub.add_parser("repo", help="repository registry")

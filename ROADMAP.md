@@ -11,7 +11,7 @@ Resumo das fases:
 | 2 — Content + Growth | Content engine, SEO, blog publisher, social scheduler (approval-gated), campaigns, analytics | ✅ parcial (SPEC-022/023/024/025/034/035) — campaigns PLANNED |
 | 3 — Leads, CRM, Meetings | Lead intelligence, scoring (explicável), qualification, CRM (SQLite fallback), next best action, meeting scheduling (Google Calendar/Meet adapter) | PLANNED |
 | 4 — Education, Community, DevRel | Academy (tracks/courses/labs/certifications), community (Discord blueprint), DevRel, social avançado | PLANNED |
-| 5 — Control Center | Dashboard, RAG debugger, run debugger, backups, self-audit, self-improvement | PLANNED |
+| 5 — Control Center | Dashboard (SPEC-038 ✅ bootstrap: HTML estático), RAG debugger, run debugger, backups, self-audit, self-improvement | PLANNED |
 
 Specs de adoção obrigatórias (SPEC-101..112) estão mapeadas no roadmap completo; o
 padrão Shadow Mode + feature flags precede qualquer automação externa (ADR-0005).

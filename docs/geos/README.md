@@ -30,7 +30,7 @@ docs/geos/
 ├── architecture/vision.md    ← GEOS architecture vision
 ├── adrs/GEOS-ADR-0001..0006  ← foundational decisions
 ├── roadmaps/roadmap.md       ← phased roadmap + mandated adoption specs
-├── specs/SPEC-001..025/034/035/039 ← specs implemented (ver roadmap.md)
+├── specs/SPEC-001..025/034/035/038/039/103/106 ← specs implemented
 ├── automation/catalog.md     ← automation catalog (L0..L5 maturity)
 └── state/                    ← (populated by `geos init` runtime state, not hand-written)
 ```
@@ -63,6 +63,9 @@ docs/geos/
 | Social scheduler (posts por canal, agendamento, worker L3, adapters reais) | SPEC-025 | `IMPLEMENTED` + `TESTED` |
 | Opportunity + experiment engine (ICE/RICE explicável) | SPEC-034 | `IMPLEMENTED` + `TESTED` |
 | Analytics (metric registry + insights por regra) | SPEC-035 | `IMPLEMENTED` + `TESTED` |
+| Control Center (dashboard HTML estático) | SPEC-038 | `IMPLEMENTED` + `TESTED` (bootstrap) |
+| Greenfield bootstrap (`geos bootstrap`) | SPEC-103 | `IMPLEMENTED` + `TESTED` |
+| Integration planner (`geos plan`) | SPEC-106 | `IMPLEMENTED` + `TESTED` |
 | Model providers (LLM OpenAI-compatible, síntese ancorada) | SPEC-039 | `IMPLEMENTED` + `TESTED` |
 
 **Not yet implemented** (see `roadmaps/roadmap.md`): adapters reais de blog/social (CMS,
@@ -74,7 +77,7 @@ control center, integrações externas.
 From the repository root (`geos/`):
 
 ```bash
-python -m unittest discover -s tests -t .    # 235 tests (stdlib, zero deps)
+python -m unittest discover -s tests -t .    # 247 tests (stdlib, zero deps)
 python -m geos.cli doctor                     # environment + config checks
 ```
 

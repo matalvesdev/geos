@@ -27,10 +27,11 @@ Required by the Installation, Bootstrap & Adoption Model (spec §73). Statuses:
 |---|---|---|
 | SPEC-101 | Project Discovery | ✅ IMPLEMENTED (core of SPEC-008) |
 | SPEC-102 | Mode Detection (greenfield/brownfield/standalone) | ✅ IMPLEMENTED (SPEC-008) |
-| SPEC-103 | Greenfield Bootstrap (`geos init --mode greenfield`, `geos bootstrap`) | PLANNED |
+| SPEC-103 | Greenfield Bootstrap (`geos init --mode greenfield`, `geos bootstrap`) | ✅ IMPLEMENTED + TESTED (bootstrap idempotente, seed, automações) |
 | SPEC-104 | Brownfield Audit (`geos audit`, capability map) | ✅ PARTIAL (SPEC-009; full `geos audit` output planned) |
 | SPEC-105 | Capability Discovery (detector plugins) | ✅ PARTIAL (SPEC-009 core detectors; plugin API PLANNED) |
-| SPEC-106 | Integration Planner (`geos plan`) | PLANNED |
+| SPEC-038 | Control Center (dashboard estático autocontido) | ✅ IMPLEMENTED + TESTED (bootstrap: `control-center build`) |
+| SPEC-106 | Integration Planner (`geos plan`) | ✅ IMPLEMENTED + TESTED (plano em 5 fases, read-only) |
 | SPEC-107 | Repository Registry (`geos repo add/list/scan`) | PARTIAL (registry + zetra-one seed; CLI planned) |
 | SPEC-108 | Multi-Repo / Standalone Control Plane | PLANNED |
 | SPEC-109 | Shadow Mode | PLANNED (pattern specified in ADR-0005) |

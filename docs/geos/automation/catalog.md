@@ -34,7 +34,12 @@
 | A-024 | social-schedule | Social | CLI `geos social due` / `schedule` | agendamento → fila SCHEDULED → vencidos listados | SocialEngine (SPEC-025 R4) | none (read-only; escrita exige publish aprovado) | scheduled_at, due | ✅ IMPLEMENTED (v0.8.0) |
 | A-025 | social-publish | Social | CLI `geos social publish [--approve]` | post → arquivo por canal (adapter) — **aprovação humana obrigatória** | SocialEngine + ApprovalEngine (SPEC-025, `social.publish` = HUMAN_APPROVAL_REQUIRED) | write local (adapter), gated | path, approval | ✅ IMPLEMENTED (v0.8.0) |
 | A-026 | analytics-collect | Analytics | CLI `geos analytics collect` | estado local → snapshot de métricas + insights | AnalyticsEngine (SPEC-035) | none (read-only) | snapshots, insights | ✅ IMPLEMENTED (v0.9.0) |
-| A-027 | social-worker | Social | CLI `geos social worker` | posts pré-aprovados + vencidos → publish | SocialEngine.worker (SPEC-025 R4, L3) | write local (adapter), somente pré-aprovados | published, waiting | ✅ IMPLEMENTED (v0.9.0) |
+| A-027 | social-worker | Social | CLI `geos social worker` / job `social.worker` | posts pré-aprovados + vencidos → publish | SocialEngine.worker (SPEC-025 R4, L3) | write local (adapter), somente pré-aprovados | published, waiting | ✅ IMPLEMENTED (v0.9.0; job agendado v0.10.0) |
+| A-028 | analytics-collect | Analytics | job `analytics.collect` (cron) | estado local → snapshot + insights | AnalyticsEngine (SPEC-035) | none (read-only) | snapshots, insights | ✅ IMPLEMENTED (v0.10.0) |
+| A-029 | opportunities-collect | Growth | job `opportunities.collect` (cron) | research + SEO gaps → oportunidades | OpportunityEngine (SPEC-034) | none (read-only) | opportunities | ✅ IMPLEMENTED (v0.10.0) |
+| A-030 | seo-audit | SEO | job `seo.audit` (cron semanal) | docs + content → issues persistidas | SeoEngine (SPEC-023) | none (read-only) | audits, issues | ✅ IMPLEMENTED (v0.10.0) |
+| A-031 | control-center | Core | CLI `geos control-center build` | estado local → dashboard HTML estático | ControlCenter (SPEC-038) | none (read-only) | control-center.html | ✅ IMPLEMENTED (v0.10.0) |
+| A-032 | bootstrap | Core | CLI `geos bootstrap` | dir vazio → workspace funcional | Bootstrap (SPEC-103) | none (local) | workflows, docs, seed, automações | ✅ IMPLEMENTED (v0.10.0) |
 
 ## Failure modes (all automations)
 

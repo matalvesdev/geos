@@ -3,6 +3,49 @@
 Todas as mudanças relevantes do GEOS são registradas aqui (spec §198). Formato
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e versionamento semântico.
 
+## [0.10.0] — 2026-08-11 — Control Center + Bootstrap + Planner + Automations
+
+### Added
+
+- **Control Center** (SPEC-038 bootstrap): `geos control-center build` gera um
+  único `control-center.html` **estático e autocontido** (dark theme, zero assets,
+  charts em CSS puro, sem JS) com KPIs, insights, distribuição, aprovações
+  pendentes, saúde, runs recentes e o último snapshot de métricas (SPEC-035).
+  Determinístico e read-only; verificado no navegador (zero console errors).
+- **Greenfield Bootstrap** (SPEC-103): `geos bootstrap` transforma um diretório
+  vazio em workspace funcional — workflows de exemplo, docs de exemplo ingeridos,
+  banco migrado, conteúdo seed aprovado (idempotente) e automações padrão
+  registradas. Nada externo é tocado.
+- **Integration Planner** (SPEC-106): `geos plan` (antes experimental) agora é um
+  plano determinístico em 5 fases baseado no manifest + estado local (docs,
+  content, blog, social, automações) — read-only, sempre respeitando ADR-0005.
+- **Automation Registry persistido** (SPEC-006 wiring): `.geos/automations.json`
+  guarda schedules com `next_run` persistido, então `geos automations run`
+  enfileira e processa jobs cron **entre invocações** (não só em processo vivo).
+  Handlers internos registrados: `social.worker` (L3 — apenas pré-aprovados),
+  `analytics.collect`, `opportunities.collect`, `seo.audit`.
+- 12 novos testes (247 no total).
+
+### Fixed
+
+- **Cron não disparava entre invocações** (revisão): o Scheduler era in-memory;
+  agora `next_run` é persistido por automação e `run_automations` enfileira os
+  vencidos a cada chamada.
+- **Automação recém-registrada nunca disparava** (revisão crítica): com
+  `next_run=None`, a 1ª invocação calculava a próxima ocorrência (futura) e
+  `continue` sem persistir — o schedule morria no nascedouro. Agora a 1ª
+  invocação persiste o primeiro `next_run` (cron não dispara no registro) e as
+  seguintes disparam quando devido; regressão cobre o ciclo completo.
+- **Timezone** (revisão): comparação de `next_run` usa UTC-aware (consistente com
+  `now_iso`), evitando `can't compare offset-naive/aware`.
+- **Seed de bootstrap idempotente** (revisão): re-run reusa o item seed em vez de
+  criar outro conteúdo.
+
+### Changed
+
+- README (247 testes, features control-center/bootstrap/plan/automations), roadmap
+  SPEC-038/103/106 ✅, catálogo de automações (A-028..A-032), versão 0.10.0.
+
 ## [0.9.0] — 2026-08-11 — Analytics + Social Worker + Channel Adapters
 
 ### Added
