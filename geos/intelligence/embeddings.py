@@ -9,8 +9,12 @@ sentence-transformers, …) plug in behind the same protocol. Content-hash cache
 from __future__ import annotations
 
 import hashlib
+import json
 import math
+import os
 import re
+import urllib.error
+import urllib.request
 from typing import Any, Protocol, Sequence
 
 from ..storage.database import Database
@@ -75,6 +79,102 @@ class HashEmbeddingProvider:
 
     def _hash(self, token: str) -> int:
         return int(hashlib.md5(f"{self._seed}:{token}".encode("utf-8")).hexdigest()[:8], 16)
+
+
+class EmbeddingError(Exception):
+    """Raised when an embedding provider fails (network, auth, malformed response)."""
+
+
+class OpenAIEmbeddingProvider:
+    """OpenAI-compatible embeddings behind the EmbeddingProvider protocol (SPEC-011).
+
+    stdlib `urllib` only — no SDK dependency. The endpoint is configurable, so any
+    OpenAI-compatible API works (OpenAI, Azure OpenAI, local vLLM/Ollama, ...).
+    API key comes from the constructor or the GEOS_OPENAI_API_KEY / OPENAI_API_KEY
+    env vars. Deterministic metadata (provider/model/dimension) is recorded per
+    embedding row so retrieval provenance stays intact.
+    """
+
+    def __init__(self, api_key: str | None = None, model: str = "text-embedding-3-small",
+                 endpoint: str = "https://api.openai.com/v1/embeddings",
+                 dimension: int | None = None, timeout_s: int = 30) -> None:
+        self._api_key = (api_key or os.environ.get("GEOS_OPENAI_API_KEY")
+                         or os.environ.get("OPENAI_API_KEY"))
+        if not self._api_key:
+            raise EmbeddingError(
+                "OpenAIEmbeddingProvider requires an API key "
+                "(constructor or GEOS_OPENAI_API_KEY/OPENAI_API_KEY env vars)"
+            )
+        self._model = model
+        self._endpoint = endpoint
+        self._dimension = dimension
+        self._timeout_s = timeout_s
+        self._observed_dimension = dimension
+
+    def embed_text(self, text: str) -> list[float]:
+        return self.embed_batch([text])[0]
+
+    def embed_batch(self, texts: Sequence[str]) -> list[list[float]]:
+        if not texts:
+            return []
+        body: dict[str, Any] = {"model": self._model, "input": [str(t) for t in texts]}
+        if self._dimension:
+            body["dimensions"] = self._dimension
+        request = urllib.request.Request(
+            self._endpoint,
+            data=json.dumps(body).encode("utf-8"),
+            headers={"Content-Type": "application/json",
+                     "Authorization": f"Bearer {self._api_key}"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self._timeout_s) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")[:200]
+            raise EmbeddingError(f"embedding HTTP {exc.code}: {detail}") from exc
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            # URLError does not cover socket.timeout / http.client.IncompleteRead /
+            # ConnectionResetError (OSError subclasses) — all become typed errors.
+            reason = getattr(exc, "reason", exc)
+            raise EmbeddingError(f"embedding network error: {reason}") from exc
+        except json.JSONDecodeError as exc:
+            raise EmbeddingError(f"embedding response is not valid JSON: {exc}") from exc
+        vectors: list[list[float]] = []
+        for item in payload.get("data") or []:
+            vector = [float(x) for x in (item.get("embedding") or [])]
+            if not vector:
+                raise EmbeddingError("embedding response item missing vector")
+            vectors.append(vector)
+            if self._observed_dimension is None:
+                self._observed_dimension = len(vector)
+        if len(vectors) != len(texts):
+            raise EmbeddingError(
+                f"embedding response mismatch: got {len(vectors)} vectors for {len(texts)} texts"
+            )
+        return vectors
+
+    def dimension(self) -> int:
+        return self._observed_dimension or self._dimension or 1536
+
+    def metadata(self) -> dict[str, Any]:
+        return {"provider": "openai", "model": self._model,
+                "dimension": self.dimension(), "endpoint": self._endpoint}
+
+
+def provider_from_config(knowledge_cfg: dict[str, Any] | None) -> EmbeddingProvider:
+    """Build the embedding provider from the `knowledge.embeddings` config section.
+
+    provider: "hash" (default, deterministic local) | "openai" (OpenAI-compatible
+    API; key via env GEOS_OPENAI_API_KEY/OPENAI_API_KEY). Options pass through to the
+    provider constructor.
+    """
+    cfg = dict((knowledge_cfg or {}).get("embeddings") or {})
+    kind = str(cfg.get("provider", "hash")).lower()
+    options = dict(cfg.get("options") or {})
+    if kind == "openai":
+        return OpenAIEmbeddingProvider(**options)
+    return HashEmbeddingProvider()
 
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:

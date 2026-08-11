@@ -3,6 +3,45 @@
 Todas as mudanças relevantes do GEOS são registradas aqui (spec §198). Formato
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e versionamento semântico.
 
+## [0.3.0] — 2026-08-11 — Content Engine + PyPI readiness + real embeddings
+
+### Added
+
+- **Content Engine** (SPEC-022): `ContentEngine` em `domains/content.py` com objeto
+  tipado (18 tipos), scoring determinístico e explicável (9 componentes + breakdown +
+  confiança 0.5 honesta), pipeline de status validado (`IDEA → BRIEFED → DRAFTED →
+  REVIEWING → APPROVED → SCHEDULED → PUBLISHED → ARCHIVED`, transições ilegais falham
+  com `ContentError`), repurposing determinístico (registra `repurposed-from:<id>`;
+  nunca copia mecanicamente) e versionamento via `content_versions`.
+- **Migration V3** (`content_phase2`): tabelas `content` + `content_versions` com
+  índice único de slug.
+- **CLI `geos content`**: `create`, `list`, `score`, `status`, `show`.
+- **OpenAI-compatible embeddings** (SPEC-011): `OpenAIEmbeddingProvider` atrás do
+  protocolo (stdlib `urllib`, zero deps; endpoint/modelo configuráveis — OpenAI,
+  Azure, vLLM/Ollama locais; chave via env `GEOS_OPENAI_API_KEY`/`OPENAI_API_KEY`),
+  factory `provider_from_config` lendo `knowledge.embeddings` do `geos.yaml`, flags
+  `--provider hash|openai` em `geos knowledge ingest|reindex`.
+- **Handlers**: `content.ideate`; `content.draft` agora persiste via ContentEngine
+  (idempotente por tópico — runs agendados reusam o mesmo item).
+- **PyPI readiness**: `pyproject.toml` corrigido (classifiers como lista PEP 621,
+  license table, authors, keywords), sdist+wheel buildados e validados com
+  `twine check` (bug latente de parse TOML descoberto e corrigido).
+
+### Fixed
+
+- `OpenAIEmbeddingProvider` agora converte timeout/disconnect (`TimeoutError`,
+  `http.client.IncompleteRead`/`ConnectionResetError`, URLError) em `EmbeddingError`
+  tipado — nenhuma exceção crua escapa do protocolo.
+- `write_brief` valida status (`IDEA` apenas) — não rebobina mais itens PUBLISHED/ARCHIVED.
+- Novelty counting via `COUNT(*)` SQL (era O(n) com cap de 1000 itens).
+- Testes de regressão: idempotência do handler, guard do brief, contagem case-insensitive.
+
+### Changed
+
+- README: badges (CI, Python, licença, PyPI, testes), seção de features, contagens
+  atualizadas (132 testes, SPEC-001..022). `geos.yaml` default documenta
+  `knowledge.embeddings`.
+
 ## [0.2.0] — 2026-08-11 — Phase 1: Knowledge + Research
 
 ### Added

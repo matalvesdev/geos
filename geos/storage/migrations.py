@@ -223,9 +223,58 @@ CREATE INDEX IF NOT EXISTS idx_insights_type ON insights(insight_type);
 """
 
 
+V3_CONTENT_PHASE2 = """
+CREATE TABLE IF NOT EXISTS content (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  content_type TEXT NOT NULL,
+  status TEXT NOT NULL,
+  title TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  topic TEXT,
+  audience TEXT,
+  persona TEXT,
+  funnel_stage TEXT,
+  objective TEXT,
+  keywords TEXT,
+  brief TEXT,
+  sources TEXT,
+  body TEXT,
+  assets TEXT,
+  cta TEXT,
+  distribution TEXT,
+  metrics TEXT,
+  score REAL,
+  score_breakdown TEXT,
+  mock INTEGER NOT NULL DEFAULT 1,
+  source_workflow TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_content_slug ON content(slug);
+CREATE INDEX IF NOT EXISTS idx_content_status ON content(status);
+CREATE INDEX IF NOT EXISTS idx_content_type ON content(content_type);
+
+CREATE TABLE IF NOT EXISTS content_versions (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  content_id TEXT NOT NULL REFERENCES content(id) ON DELETE CASCADE,
+  version INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  title TEXT,
+  body TEXT,
+  brief TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_content_versions_content ON content_versions(content_id);
+"""
+
+
 MIGRATIONS: list[tuple[int, str, str]] = [
     (1, "bootstrap", V1_BOOTSTRAP),
     (2, "knowledge_phase1", V2_KNOWLEDGE_PHASE1),
+    (3, "content_phase2", V3_CONTENT_PHASE2),
 ]
 
 MAX_VERSION = max(v for v, _, _ in MIGRATIONS)

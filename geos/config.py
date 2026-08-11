@@ -38,6 +38,7 @@ class Settings:
     storage_path: str = ".geos/geos.db"
     knowledge_rag: bool = True
     knowledge_graph: bool = True
+    knowledge_embeddings: dict[str, Any] = field(default_factory=dict)
     agents: dict[str, Any] = field(default_factory=dict)
     automations: dict[str, Any] = field(default_factory=dict)
     approvals: dict[str, str] = field(default_factory=dict)
@@ -86,6 +87,7 @@ class Settings:
         if isinstance(knowledge, dict):
             settings.knowledge_rag = bool(knowledge.get("rag", settings.knowledge_rag))
             settings.knowledge_graph = bool(knowledge.get("graph", settings.knowledge_graph))
+            settings.knowledge_embeddings = dict(knowledge.get("embeddings") or {})
 
         settings.agents = dict(raw.get("agents") or {})
         settings.automations = dict(raw.get("automations") or {})

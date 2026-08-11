@@ -20,7 +20,9 @@
 | A-010 | research-run | Research | CLI/event | question → report+insights (mock) | ResearchAgent (determinístico) | none (read-only) | research rows, insights | ✅ IMPLEMENTED |
 | A-011 | graph-extract | Knowledge | CLI `geos graph extract` | docs → nós/arestas | RuleBasedExtractor | none | nodes, edges | ✅ IMPLEMENTED |
 | A-012 | hybrid-retrieval | Knowledge | CLI/workflow | query → hits+citações | HybridRetriever | none | hits, tokens | ✅ IMPLEMENTED |
-| A-013 | content-factory (slice 1) | Content | cron/manual | research→brief→draft→social→approval→schedule | ResearchAgent, WriterAgent | HUMAN_APPROVAL_REQUIRED (publish) | runs, approvals | ✅ IMPLEMENTED (v0.2.0) |
+| A-013 | content-factory (slice 1) | Content | cron/manual | research→brief→draft→social→approval→schedule | ResearchAgent, WriterAgent | HUMAN_APPROVAL_REQUIRED (publish) | runs, approvals | ✅ IMPLEMENTED (v0.2.0; draft persiste desde v0.3.0) |
+| A-014 | content-engine | Content | CLI/workflow | topic → idea pontuada → brief → draft versionado | ContentEngine (determinístico) | none (internal) | content, versions, score | ✅ IMPLEMENTED (v0.3.0) |
+| A-015 | content-repurpose | Content | CLI/workflow | draft → variantes por canal | ContentEngine.repurpose | none (internal, mock) | variants, sources | ✅ IMPLEMENTED (v0.3.0) |
 
 ## Failure modes (all automations)
 

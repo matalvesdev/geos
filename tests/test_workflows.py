@@ -53,7 +53,9 @@ class WorkflowTests(unittest.TestCase):
         brief = result.step("brief")
         self.assertIsNotNone(brief)
         self.assertEqual(brief.status, StepStatus.SUCCESS)  # type: ignore[union-attr]
-        self.assertIn("conciliação", brief.output["title"])  # type: ignore[index, union-attr]
+        # content.draft persists through the ContentEngine: title is canonical.
+        self.assertIn("conciliação", str(brief.output["title"]).lower())  # type: ignore[index, union-attr]
+        self.assertIsNotNone(brief.output.get("content_id"))  # type: ignore[union-attr]
         self.assertIsNotNone(result.run_id)
 
     def test_condition_attribute_chain(self) -> None:
@@ -232,6 +234,34 @@ class WorkflowTests(unittest.TestCase):
             result = engine.run(Workflow.load(path))
         self.assertEqual(result.status, WorkflowStatus.SUCCESS)
         self.assertEqual(calls["n"], 2)
+
+    def test_content_draft_idempotent_per_topic(self) -> None:
+        """Regression: repeated scheduled runs reuse the same content idea."""
+        with TempDir() as tmp:
+            path = _write_workflow(
+                tmp,
+                """workflow:
+  id: dupe
+  trigger: {kind: manual}
+  steps:
+    - id: draft
+      type: agent
+      agent: content.draft
+      input: {topic: "origem de crédito"}
+""",
+            )
+            wf = Workflow.load(path)
+            first = self.engine.run(wf)
+            second = self.engine.run(wf)
+        self.assertEqual(first.status, WorkflowStatus.SUCCESS)
+        self.assertEqual(second.status, WorkflowStatus.SUCCESS)
+        first_id = first.step("draft").output["content_id"]  # type: ignore[union-attr]
+        second_id = second.step("draft").output["content_id"]  # type: ignore[union-attr]
+        self.assertEqual(first_id, second_id)
+        count = self.db.conn_checked.execute(
+            "SELECT COUNT(*) c FROM content"
+        ).fetchone()["c"]
+        self.assertEqual(count, 1)
 
     def test_runs_and_events_persisted(self) -> None:
         with TempDir() as tmp:

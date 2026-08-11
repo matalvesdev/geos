@@ -48,19 +48,24 @@ Required by the Installation, Bootstrap & Adoption Model (spec §73). Statuses:
 | Memory (MemoryStore com TTL/sensibilidade + WorkingMemory) | SPEC-014 | ✅ IMPLEMENTED + TESTED |
 | Research Engine (pipeline determinístico sobre a base local) | SPEC-021 | ✅ IMPLEMENTED + TESTED |
 | Vertical slice 1 (research → brief → draft → social → approval → schedule) | SPEC-007/021 | ✅ workflow `content-factory` + `workflows schedule/worker` |
-| Embeddings treinados/LLM (providers reais atrás dos protocolos) | SPEC-011 | PLANNED |
+| Embeddings treinados/LLM (providers reais atrás dos protocolos) | SPEC-011 | ✅ OpenAI-compatible provider + factory (`knowledge.embeddings`) |
 
 O research engine é **determinístico sobre o índice local** (synthesis marcada `mock: True`);
 fontes externas reais e síntese por modelo chegam via `ModelProvider` (próxima fase).
 
 ## Phase 2 — Content + Growth engines
 
-- SPEC-022 Content Engine (content object, scoring, repurposing), SPEC-023 SEO Engine,
-  SPEC-024 Blog Publisher (markdown/CMS adapters), SPEC-025 Social Scheduler
-  (human-approval gated), SPEC-034 Campaign Engine, SPEC-035 Analytics (AnalyticsProvider +
-  metric registry + automated insights with OBSERVATION/HYPOTHESIS/INVESTIGATION framing).
-- Automations: `daily-growth-intelligence` (SPEC-143), `weekly-content`, `weekly-growth-review`,
-  changelog/release automation (SPEC-148) — all behind approvals and feature flags.
+| Item | SPEC | Status |
+|---|---|---|
+| Content Engine (content object, scoring determinístico, pipeline validado, repurposing) | SPEC-022 | ✅ IMPLEMENTED + TESTED (CLI `geos content`, handlers idempotentes) |
+| SEO Engine (pesquisa, técnico, conteúdo, internal linking, oportunidades, decay) | SPEC-023 | PLANNED |
+| Blog Publisher (markdown/CMS adapters) | SPEC-024 | PLANNED |
+| Social Scheduler (human-approval gated) | SPEC-025 | PLANNED |
+| Campaign Engine | SPEC-034 | PLANNED |
+| Analytics (AnalyticsProvider + metric registry + insights OBSERVATION/HYPOTHESIS/INVESTIGATION) | SPEC-035 | PLANNED |
+
+Automations: `daily-growth-intelligence` (SPEC-143), `weekly-content`, `weekly-growth-review`,
+changelog/release automation (SPEC-148) — all behind approvals and feature flags.
 
 ## Phase 3 — Leads, CRM, Meetings
 

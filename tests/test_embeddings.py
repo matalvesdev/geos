@@ -2,11 +2,37 @@
 
 from __future__ import annotations
 
+import json
 import unittest
+import urllib.error
+from unittest import mock
 
-from geos.intelligence.embeddings import HashEmbeddingProvider, SqliteVectorStore, cosine_similarity
+from geos.intelligence.embeddings import (
+    EmbeddingError,
+    HashEmbeddingProvider,
+    OpenAIEmbeddingProvider,
+    SqliteVectorStore,
+    cosine_similarity,
+    provider_from_config,
+)
 from geos.storage.repos import KnowledgeRepository
 from tests.helpers import temp_db
+
+
+class FakeResponse:
+    """Minimal file-like response for mocked urllib calls."""
+
+    def __init__(self, payload: dict) -> None:
+        self._payload = payload
+
+    def read(self) -> bytes:
+        return json.dumps(self._payload).encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc) -> None:
+        return None
 
 
 def _seed_chunk(db, chunk_id: str, content: str, uri: str = "test://a.md",
@@ -90,6 +116,66 @@ class EmbeddingTests(unittest.TestCase):
             "origem de crédito", self.provider.embed_text("origem de crédito"), limit=3
         )
         self.assertGreaterEqual(len(hits), 1)
+
+
+class OpenAIEmbeddingTests(unittest.TestCase):
+    """OpenAI-compatible provider behind the protocol (mock HTTP, no network)."""
+
+    def _provider(self, dimension: int | None = 4, **kwargs) -> OpenAIEmbeddingProvider:
+        return OpenAIEmbeddingProvider(api_key="test-key", model="mock-model",
+                                       endpoint="https://example.test/v1/embeddings",
+                                       dimension=dimension, timeout_s=5, **kwargs)
+
+    def test_embed_batch_parses_response(self) -> None:
+        payload = {"data": [{"embedding": [0.1, 0.2, 0.3, 0.4]},
+                            {"embedding": [0.5, 0.6, 0.7, 0.8]}]}
+        provider = self._provider()
+        with mock.patch("urllib.request.urlopen", return_value=FakeResponse(payload)) as urlopen:
+            vectors = provider.embed_batch(["a", "b"])
+        self.assertEqual(len(vectors), 2)
+        self.assertEqual(vectors[1][0], 0.5)
+        self.assertEqual(provider.dimension(), 4)
+        # request carries model + authorization
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.get_header("Authorization"), "Bearer test-key")
+        body = json.loads(request.data)
+        self.assertEqual(body["model"], "mock-model")
+
+    def test_requires_api_key(self) -> None:
+        with mock.patch.dict("os.environ", {}, clear=True):
+            with self.assertRaises(EmbeddingError):
+                OpenAIEmbeddingProvider(api_key=None)
+
+    def test_http_error_raises_embedding_error(self) -> None:
+        provider = self._provider()
+        error = urllib.error.HTTPError("https://example.test", 401, "unauthorized",
+                                       {}, None)
+        error.read = lambda: b'{"error": "invalid api key"}'  # type: ignore[method-assign]
+        with mock.patch("urllib.request.urlopen", side_effect=error):
+            with self.assertRaises(EmbeddingError) as ctx:
+                provider.embed_text("x")
+        self.assertIn("401", str(ctx.exception))
+
+    def test_count_mismatch_raises(self) -> None:
+        payload = {"data": [{"embedding": [0.1, 0.2, 0.3, 0.4]}]}  # 1 vector, 2 texts
+        provider = self._provider()
+        with mock.patch("urllib.request.urlopen", return_value=FakeResponse(payload)):
+            with self.assertRaises(EmbeddingError):
+                provider.embed_batch(["a", "b"])
+
+    def test_provider_from_config(self) -> None:
+        self.assertIsInstance(provider_from_config(None), HashEmbeddingProvider)
+        self.assertIsInstance(provider_from_config({"embeddings": {}}), HashEmbeddingProvider)
+        with mock.patch.dict("os.environ", {"GEOS_OPENAI_API_KEY": "env-key"}, clear=True):
+            p = provider_from_config({"embeddings": {"provider": "openai",
+                                                     "options": {"model": "m"}}})
+        self.assertIsInstance(p, OpenAIEmbeddingProvider)
+        self.assertEqual(p.metadata()["model"], "m")
+
+    def test_provider_from_config_openai_without_key_raises(self) -> None:
+        with mock.patch.dict("os.environ", {}, clear=True):
+            with self.assertRaises(EmbeddingError):
+                provider_from_config({"embeddings": {"provider": "openai"}})
 
 
 if __name__ == "__main__":

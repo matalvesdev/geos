@@ -137,6 +137,11 @@ storage:
 knowledge:
   rag: true
   graph: true
+  # embeddings:
+  #   provider: hash   # hash (determinístico local) | openai (chave via env GEOS_OPENAI_API_KEY)
+  #   options:
+  #     model: text-embedding-3-small
+  #     endpoint: https://api.openai.com/v1/embeddings
 
 agents:
   research: true
@@ -226,6 +231,15 @@ def cmd_db_migrate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _embedding_provider(settings: Settings, override: str | None = None):
+    """Embedding provider from config `knowledge.embeddings`, with CLI override."""
+    from .intelligence.embeddings import provider_from_config
+
+    if override:
+        return provider_from_config({"embeddings": {"provider": override}})
+    return provider_from_config(settings.knowledge_embeddings)
+
+
 def cmd_knowledge_ingest(args: argparse.Namespace) -> int:
     from .intelligence.knowledge import ingest_directory
 
@@ -236,6 +250,7 @@ def cmd_knowledge_ingest(args: argparse.Namespace) -> int:
         result = ingest_directory(
             db, root=args.path, source=args.source or Path(args.path).name,
             doc_type=args.type,
+            provider=_embedding_provider(settings, args.provider),
         )
         print(f"Ingest: {result.files_seen} files | added={result.added} "
               f"updated={result.updated} unchanged={result.unchanged} "
@@ -287,7 +302,7 @@ def cmd_knowledge_reindex(args: argparse.Namespace) -> int:
     db = _db(settings)
     db.migrate()
     try:
-        total = reindex_embeddings(db)
+        total = reindex_embeddings(db, provider=_embedding_provider(settings, args.provider))
         print(f"reindex: embeddings reconstruídos={total}")
     finally:
         db.close()
@@ -547,6 +562,97 @@ def cmd_workflows_worker(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_content_list(args: argparse.Namespace) -> int:
+    from .domains.content import ContentEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        items = ContentEngine(db).list(status=args.status, content_type=args.type,
+                                       limit=args.limit)
+        print(f"{len(items)} content item(s)")
+        for item in items:
+            score = f"score={item.get('score'):.2f}" if item.get("score") is not None else "score=-   "
+            print(f"  {item['status']:10s} {item['content_type']:18s} {score} "
+                  f"{item['title']} ({item['slug']})")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_content_create(args: argparse.Namespace) -> int:
+    from .domains.content import ContentEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        engine = ContentEngine(db)
+        item = engine.create_idea(args.topic, content_type=args.type,
+                                  keywords=args.keywords or [],
+                                  source_workflow=args.workflow)
+        print(f"created {item['id']} | {item['status']} | score={item['score']}")
+        print(f"  title: {item['title']} ({item['slug']})")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_content_score(args: argparse.Namespace) -> int:
+    from .domains.content import ContentEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        result = ContentEngine(db).score(args.content_id)
+        print(f"score={result['score']} confidence={result['confidence']}")
+        for name, value in sorted(result["breakdown"].items()):
+            print(f"  {name:24s} {value:.2f}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_content_status(args: argparse.Namespace) -> int:
+    from .domains.content import ContentEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        item = ContentEngine(db).transition(args.content_id, args.status)
+        print(f"{item['id']}: {item['status']} (version={item['version']})")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_content_show(args: argparse.Namespace) -> int:
+    from .domains.content import ContentEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        item = ContentEngine(db).get(args.content_id)
+        print(f"{item['title']} ({item['slug']})")
+        print(f"type={item['content_type']} status={item['status']} "
+              f"version={item['version']} mock={item['mock']}")
+        print(f"topic: {item.get('topic')}")
+        print(f"keywords: {', '.join(item.get('keywords') or []) or '-'}")
+        if item.get("score") is not None:
+            print(f"score: {item['score']}")
+        if item.get("brief"):
+            print(f"\n--- brief ---\n{item['brief']}")
+        if item.get("body"):
+            print(f"\n--- body ---\n{item['body']}")
+    finally:
+        db.close()
+    return 0
+
+
 def cmd_repo(args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
     registry = RepositoryRegistry(root / REGISTRY_PATH)
@@ -598,10 +704,13 @@ def main(argv: list[str] | None = None) -> int:
     p_ingest.add_argument("path", help="directory to ingest (markdown/txt)")
     p_ingest.add_argument("--source", default=None, help="source label (default: dir name)")
     p_ingest.add_argument("--type", default="markdown", help="doc_type (default: markdown)")
+    p_ingest.add_argument("--provider", choices=["hash", "openai"], default=None,
+                          help="embedding provider override (default: config or hash)")
     p_ingest.set_defaults(func=cmd_knowledge_ingest)
-    p_knowledge_sub.add_parser("reindex", help="reconstruir embeddings de todos os docs").set_defaults(
-        func=cmd_knowledge_reindex
-    )
+    p_reindex = p_knowledge_sub.add_parser("reindex", help="reconstruir embeddings de todos os docs")
+    p_reindex.add_argument("--provider", choices=["hash", "openai"], default=None,
+                           help="embedding provider override (default: config or hash)")
+    p_reindex.set_defaults(func=cmd_knowledge_reindex)
     p_search = p_knowledge_sub.add_parser("search", help="FTS search over ingested chunks")
     p_search.add_argument("query")
     p_search.add_argument("--limit", type=int, default=10)
@@ -653,6 +762,30 @@ def main(argv: list[str] | None = None) -> int:
     p_approvals_sub.add_parser("list", help="list pending approvals").set_defaults(
         func=cmd_approvals_list
     )
+
+    p_content = sub.add_parser("content", help="content engine (SPEC-022)")
+    p_content_sub = p_content.add_subparsers(dest="content_action", required=True)
+    p_clist = p_content_sub.add_parser("list", help="list content items")
+    p_clist.add_argument("--status", default=None)
+    p_clist.add_argument("--type", default=None)
+    p_clist.add_argument("--limit", type=int, default=50)
+    p_clist.set_defaults(func=cmd_content_list)
+    p_ccreate = p_content_sub.add_parser("create", help="create a scored content idea")
+    p_ccreate.add_argument("topic")
+    p_ccreate.add_argument("--type", default="blog_post", help="content type")
+    p_ccreate.add_argument("--keywords", action="append", default=None)
+    p_ccreate.add_argument("--workflow", default=None)
+    p_ccreate.set_defaults(func=cmd_content_create)
+    p_cscore = p_content_sub.add_parser("score", help="recompute deterministic score")
+    p_cscore.add_argument("content_id")
+    p_cscore.set_defaults(func=cmd_content_score)
+    p_cstatus = p_content_sub.add_parser("status", help="transition status (validated flow)")
+    p_cstatus.add_argument("content_id")
+    p_cstatus.add_argument("status", help="BRIEFED|DRAFTED|REVIEWING|APPROVED|SCHEDULED|PUBLISHED|ARCHIVED")
+    p_cstatus.set_defaults(func=cmd_content_status)
+    p_cshow = p_content_sub.add_parser("show", help="show a content item")
+    p_cshow.add_argument("content_id")
+    p_cshow.set_defaults(func=cmd_content_show)
 
     sub.add_parser("plan", help="EXPERIMENTAL: adoption recommendations from manifest").set_defaults(
         func=cmd_plan

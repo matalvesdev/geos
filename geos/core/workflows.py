@@ -460,14 +460,52 @@ def default_handlers(db: Database) -> dict[str, StepHandler]:
             "mock": True,
         }
 
-    def handle_content_draft(inputs: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
+    def handle_content_draft(inputs: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
+        # Persists through the ContentEngine: idea → brief → draft (SPEC-022).
+        # Idempotent per topic: reuses the most recent unarchived draft of the
+        # same topic so scheduled runs don't accumulate duplicate ideas.
+        from ..domains.content import ContentEngine
+
         topic = str(inputs.get("topic", "undefined"))
+        engine = ContentEngine(db)
+        item_id: str | None = None
+        for candidate in engine.list(limit=50):
+            if (candidate.get("topic") or "").strip().lower() == topic.strip().lower() \
+                    and candidate["status"] in ("IDEA", "BRIEFED", "DRAFTED"):
+                item_id = candidate["id"]
+                break
+        if item_id is None:
+            created = engine.create_idea(
+                topic=topic, content_type=str(inputs.get("content_type", "blog_post")),
+                keywords=[str(k) for k in (inputs.get("keywords") or [])],
+                source_workflow=ctx.get("trace_id"),
+            )
+            item_id = created["id"]
+        current = engine.get(item_id)
+        if current["status"] == "IDEA":
+            engine.write_brief(item_id, audience=inputs.get("audience"),
+                               objective=inputs.get("objective"),
+                               cta=inputs.get("cta"))
+        engine.produce_draft(item_id)
+        record = engine.get(item_id)
         return {
-            "title": f"Entendendo {topic}",
-            "slug": "entendendo-" + "".join(c for c in topic.lower() if c.isalnum() or c == "-")[:40],
-            "brief": f"[mock-draft] Estrutura de conteúdo sobre {topic}",
+            "content_id": record["id"], "title": record["title"],
+            "slug": record["slug"], "brief": record["brief"],
+            "status": record["status"], "score": record.get("score"),
             "mock": True,
         }
+
+    def handle_content_ideate(inputs: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
+        from ..domains.content import ContentEngine
+
+        topic = str(inputs.get("topic", "undefined"))
+        item = ContentEngine(db).create_idea(
+            topic=topic, content_type=str(inputs.get("content_type", "blog_post")),
+            keywords=[str(k) for k in (inputs.get("keywords") or [])],
+        )
+        return {"content_id": item["id"], "title": item["title"],
+                "status": item["status"], "score": item.get("score"),
+                "breakdown": item.get("score_breakdown"), "mock": True}
 
     def handle_social_draft(inputs: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
         title = str(inputs.get("title", "conteúdo"))
@@ -540,6 +578,7 @@ def default_handlers(db: Database) -> dict[str, StepHandler]:
         "research.summary": handle_research_summary,
         "research.run": handle_research_run,
         "content.brief": handle_content_brief,
+        "content.ideate": handle_content_ideate,
         "content.draft": handle_content_draft,
         "social.draft": handle_social_draft,
         "brand.review": handle_brand_review,

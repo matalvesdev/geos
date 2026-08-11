@@ -2,6 +2,12 @@
 
 > Open-source · local-first · agentic organizational growth platform
 
+[![CI](https://github.com/matalvesdev/geos/actions/workflows/ci.yml/badge.svg)](https://github.com/matalvesdev/geos/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/Python-3.11%20%7C%203.12%20%7C%203.13-3776AB?logo=python&logoColor=white)](https://github.com/matalvesdev/geos/blob/main/pyproject.toml)
+[![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/geos.svg?logo=pypi&logoColor=white)](https://pypi.org/project/geos/)
+[![Tests](https://img.shields.io/badge/tests-132%20passing-green)](https://github.com/matalvesdev/geos/actions/workflows/ci.yml)
+
 **GEOS** é uma plataforma agentic que transforma sinais de mercado em inteligência
 organizacional e ação coordenada — de forma mensurável e com supervisão humana em todo
 risco externo.
@@ -11,6 +17,28 @@ SIGNALS → RESEARCH → KNOWLEDGE → STRATEGY → CONTENT → DISTRIBUTION →
 QUALIFICATION → MEETINGS → OPPORTUNITIES → CUSTOMERS → EDUCATION → COMMUNITY →
 ANALYTICS → LEARNING → (melhor conhecimento, estratégia, produto, distribuição)
 ```
+
+## Features
+
+- **Core agentic**: agentes declarativos (YAML), workflows com aprovação, jobs com retry
+  e dead-letter, scheduler cron/intervalo (parser próprio), event bus persistido.
+- **Conhecimento local**: ingestão de Markdown com dedup por hash, chunking por headings,
+  busca FTS5, embeddings locais determinísticos, **hybrid RAG** (FTS + vetores + graph
+  boost) com citações e proveniência.
+- **Knowledge Graph**: extração determinística de entidades (companhias, produtos, tópicos,
+  problemas) + relações `discusses`/`relates_to` em SQLite.
+- **Research Engine**: pipeline QUESTION → SOURCES → SYNTHESIS → INSIGHTS sobre o índice
+  local (nunca inventa fontes; síntese marcada `mock` até existir ModelProvider).
+- **Content Engine**: objetos de conteúdo tipados (18 tipos), scoring determinístico e
+  explicável, pipeline de status validado (IDEA → … → PUBLISHED) com versionamento,
+  repurposing determinístico — CLI `geos content`.
+- **Embeddings plugáveis**: local determinístico (hash) por padrão ou OpenAI-compatible
+  (OpenAI/Azure/vLLM/Ollama) via `knowledge.embeddings` — mesmo protocolo, zero deps.
+- **Memory**: memória persistente com TTL/sensibilidade e scopes por domínio.
+- **Adoção não-destrutiva**: detecção GREENFIELD/BROWNFIELD/STANDALONE com evidências,
+  capability discovery por repo, manifest e Repository Registry.
+- **SQLite-first, zero infra obrigatória**: nada de Kafka/Redis/Postgres para rodar o
+  primeiro workflow; protocolos para trocar storage/LLM/embeddings depois.
 
 ## O que é (e o que não é)
 
@@ -56,8 +84,8 @@ Sem `pip install`? `python -m geos.cli ...` funciona igual.
 ```
 geos/
 ├── geos/          # pacote Python (core, storage, intelligence, discovery, cli)
-├── tests/         # unittest (zero deps além de PyYAML) — 83 testes
-├── docs/geos/     # auditoria, contexto, visão, ADRs, roadmap, SPEC-001..010
+├── tests/         # unittest (zero deps além de PyYAML) — 132 testes
+├── docs/geos/     # auditoria, contexto, visão, ADRs, roadmap, SPEC-001..022
 ├── workflows/     # workflows declarativos de exemplo
 ├── examples/      # quickstart + config + docs de exemplo
 └── .github/       # CI (Linux + Windows, Python 3.11–3.13)
@@ -69,13 +97,13 @@ geos/
   [docs/geos/architecture/vision.md](docs/geos/architecture/vision.md)
 - **Roadmap** → [ROADMAP.md](ROADMAP.md) · detalhado em
   [docs/geos/roadmaps/roadmap.md](docs/geos/roadmaps/roadmap.md)
-- **Specs** → [docs/geos/specs/](docs/geos/specs/) (SPEC-001..010 implementadas)
+- **Specs** → [docs/geos/specs/](docs/geos/specs/) (SPEC-001..022 implementadas)
 - **Decisões (ADRs)** → [docs/geos/adrs/](docs/geos/adrs/)
 
 ## Desenvolvimento
 
 ```bash
-python -m unittest discover -s tests -t .   # 83 testes, stdlib
+python -m unittest discover -s tests -t .   # 132 testes, stdlib
 python -m geos.cli doctor
 ```
 

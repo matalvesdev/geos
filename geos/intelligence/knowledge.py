@@ -11,7 +11,7 @@ from ..storage.database import Database
 from ..storage.repos import KnowledgeRepository
 from ..util import new_id
 from .chunking import chunk_markdown
-from .embeddings import HashEmbeddingProvider, SqliteVectorStore
+from .embeddings import EmbeddingProvider, HashEmbeddingProvider, SqliteVectorStore
 
 
 @dataclass
@@ -32,16 +32,19 @@ def ingest_directory(
     recursive: bool = True,
     doc_type: str = "markdown",
     embed: bool = True,
+    provider: EmbeddingProvider | None = None,
 ) -> IngestResult:
     """Ingest *.md / *.txt files under root. Deterministic hash dedup per URI.
     When embed=True (default), chunk embeddings are computed once per content_hash
     and stored in the SQLite vector store (SPEC-011/§17 cache).
+    `provider` defaults to the local deterministic HashEmbeddingProvider; real
+    providers (OpenAI-compatible) plug in behind the same protocol.
     """
     root = Path(root)
     if not root.is_dir():
         raise ValueError(f"ingest root is not a directory: {root}")
     repo = KnowledgeRepository(db)
-    vector_store = SqliteVectorStore(db, HashEmbeddingProvider()) if embed else None
+    vector_store = SqliteVectorStore(db, provider or HashEmbeddingProvider()) if embed else None
     result = IngestResult()
     pattern = "**/*" if recursive else "*"
     files = sorted(
@@ -87,10 +90,10 @@ def ingest_directory(
     return result
 
 
-def reindex_embeddings(db: Database) -> int:
+def reindex_embeddings(db: Database, provider: EmbeddingProvider | None = None) -> int:
     """Rebuild embeddings for all ingested documents (SPEC-011). Idempotent."""
     repo = KnowledgeRepository(db)
-    store = SqliteVectorStore(db, HashEmbeddingProvider())
+    store = SqliteVectorStore(db, provider or HashEmbeddingProvider())
     total = 0
     for doc in repo.list_documents():
         store.delete_by_document(doc["id"])

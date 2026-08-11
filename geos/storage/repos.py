@@ -749,6 +749,144 @@ class ResearchRepository:
         return [dict(r) for r in rows]
 
 
+# ---------------------------------------------------------------- Content (SPEC-022)
+class ContentRepository:
+    """Content objects + versioned snapshots (auditability, SPEC-022)."""
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def create(self, content_type: str, title: str, slug: str, topic: str | None = None,
+               audience: str | None = None, persona: str | None = None,
+               funnel_stage: str | None = None, objective: str | None = None,
+               keywords: list[str] | None = None, brief: str | None = None,
+               sources: list[str] | None = None, body: str | None = None,
+               cta: str | None = None, score: float | None = None,
+               score_breakdown: dict[str, Any] | None = None,
+               mock: bool = True, source_workflow: str | None = None) -> str:
+        content_id = new_id()
+        now = now_iso()
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO content (id, workspace_id, content_type, status, title, slug,"
+                " topic, audience, persona, funnel_stage, objective, keywords, brief,"
+                " sources, body, cta, score, score_breakdown, mock, source_workflow,"
+                " created_at, updated_at, version)"
+                " VALUES (?, 'default', ?, 'IDEA', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,"
+                " ?, ?, ?, ?, 1)",
+                (content_id, content_type, title, slug, topic, audience, persona,
+                 funnel_stage, objective, json.dumps(keywords or [], ensure_ascii=False),
+                 brief, json.dumps(sources or [], ensure_ascii=False), body, cta, score,
+                 json.dumps(score_breakdown or {}, ensure_ascii=False),
+                 1 if mock else 0, source_workflow, now, now),
+            )
+        return content_id
+
+    def get(self, content_id: str) -> dict[str, Any] | None:
+        row = self._db.conn_checked.execute(
+            "SELECT * FROM content WHERE id = ?", (content_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        return self._decode(dict(row))
+
+    def by_slug(self, slug: str) -> dict[str, Any] | None:
+        row = self._db.conn_checked.execute(
+            "SELECT * FROM content WHERE slug = ?", (slug,)
+        ).fetchone()
+        return self._decode(dict(row)) if row else None
+
+    def list(self, status: str | None = None, content_type: str | None = None,
+             limit: int = 100) -> list[dict[str, Any]]:
+        q = "SELECT * FROM content"
+        clauses: list[str] = []
+        params: list[Any] = []
+        if status:
+            clauses.append("status = ?")
+            params.append(status)
+        if content_type:
+            clauses.append("content_type = ?")
+            params.append(content_type)
+        if clauses:
+            q += " WHERE " + " AND ".join(clauses)
+        q += " ORDER BY updated_at DESC LIMIT ?"
+        params.append(limit)
+        rows = self._db.conn_checked.execute(q, params).fetchall()
+        return [self._decode(dict(r)) for r in rows]
+
+    def update(self, content_id: str, **fields: Any) -> None:
+        allowed = {"status", "title", "topic", "audience", "persona", "funnel_stage",
+                   "objective", "keywords", "brief", "sources", "body", "cta", "score",
+                   "score_breakdown", "mock", "source_workflow"}
+        updates = {k: v for k, v in fields.items() if k in allowed and v is not None}
+        if not updates:
+            return
+        set_clauses = []
+        params: list[Any] = []
+        for key, value in updates.items():
+            set_clauses.append(f"{key} = ?")
+            params.append(self._encode_value(key, value))
+        set_clauses.append("updated_at = ?")
+        params.append(now_iso())
+        params.append(content_id)
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                f"UPDATE content SET {', '.join(set_clauses)} WHERE id = ?", params
+            )
+
+    def snapshot_version(self, content_id: str) -> int:
+        """Copy current state to content_versions, bump version. Returns new version."""
+        item = self.get(content_id)
+        if item is None:
+            raise NotFoundError(f"content {content_id}")
+        conn = self._db.conn_checked
+        with conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT version FROM content WHERE id = ?", (content_id,)
+            ).fetchone()
+            version = int(row["version"])
+            conn.execute(
+                "INSERT INTO content_versions (id, workspace_id, content_id, version,"
+                " status, title, body, brief, created_at)"
+                " VALUES (?, 'default', ?, ?, ?, ?, ?, ?, ?)",
+                (new_id(), content_id, version, item["status"], item["title"],
+                 item["body"], item["brief"], now_iso()),
+            )
+            conn.execute(
+                "UPDATE content SET version = ?, updated_at = ? WHERE id = ?",
+                (version + 1, now_iso(), content_id),
+            )
+        return version + 1
+
+    def versions(self, content_id: str, limit: int = 50) -> list[dict[str, Any]]:
+        rows = self._db.conn_checked.execute(
+            "SELECT * FROM content_versions WHERE content_id = ?"
+            " ORDER BY version DESC LIMIT ?", (content_id, limit)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    @staticmethod
+    def _decode(item: dict[str, Any]) -> dict[str, Any]:
+        for key in ("keywords", "sources", "assets", "distribution", "metrics",
+                    "score_breakdown"):
+            try:
+                item[key] = json.loads(item[key] or "[]") if key != "score_breakdown" \
+                    else json.loads(item[key] or "{}")
+            except (json.JSONDecodeError, TypeError):
+                item[key] = {} if key == "score_breakdown" else []
+        item["mock"] = bool(item.get("mock"))
+        return item
+
+    @staticmethod
+    def _encode_value(key: str, value: Any) -> Any:
+        if isinstance(value, (list, dict)):
+            return json.dumps(value, ensure_ascii=False)
+        if key == "mock":
+            return 1 if value else 0
+        return value
+
+
 # ---------------------------------------------------------------- Factory
 class RepoFactory:
     """Single access point to repositories for a given Database (SPEC-003 R3.1)."""
@@ -763,6 +901,7 @@ class RepoFactory:
         self.embeddings = EmbeddingRepository(db)
         self.memories = MemoryRepository(db)
         self.research = ResearchRepository(db)
+        self.content = ContentRepository(db)
 
 
 def _fts_query(query: str) -> str:
