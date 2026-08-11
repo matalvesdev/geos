@@ -28,6 +28,8 @@
 | A-018 | opportunity-collect | Growth | CLI `geos opportunities collect` | research insights + SEO gaps → opportunities (dedup por problema) | OpportunityEngine (SPEC-034) | none (read-only) | opportunities | ✅ IMPLEMENTED (v0.6.0) |
 | A-019 | opportunity-score | Growth | CLI `geos opportunities score` | ICE/RICE explicável (breakdown + razões) | OpportunityEngine (SPEC-034) | none (read-only) | score, breakdown | ✅ IMPLEMENTED (v0.6.0) |
 | A-020 | experiment-lifecycle | Growth | CLI `geos experiments` | oportunidade → hipótese → PROPOSED/RUNNING/COMPLETED + decisão/learning | ExperimentEngine (SPEC-034) | none (read-only; statuses internos) | experiments | ✅ IMPLEMENTED (v0.6.0) |
+| A-021 | blog-prepare | Blog | CLI `geos blog prepare` | conteúdo APPROVED/SCHEDULED → post markdown + front matter | BlogEngine (SPEC-024) | none (read-only) | blog_posts | ✅ IMPLEMENTED (v0.7.0) |
+| A-022 | blog-publish | Blog | CLI `geos blog publish [--approve]` | post → arquivo markdown (adapter) — **aprovação humana obrigatória** | BlogEngine + ApprovalEngine (SPEC-024, `blog.publish` = HUMAN_APPROVAL_REQUIRED) | write local (adapter), gated | path, url, approval | ✅ IMPLEMENTED (v0.7.0) |
 
 ## Failure modes (all automations)
 

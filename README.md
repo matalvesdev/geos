@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11%20%7C%203.12%20%7C%203.13-3776AB?logo=python&logoColor=white)](https://github.com/matalvesdev/geos/blob/main/pyproject.toml)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/geos.svg?logo=pypi&logoColor=white)](https://pypi.org/project/geos/)
-[![Tests](https://img.shields.io/badge/tests-167%20passing-green)](https://github.com/matalvesdev/geos/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-183%20passing-green)](https://github.com/matalvesdev/geos/actions/workflows/ci.yml)
 
 **GEOS** é uma plataforma agentic que transforma sinais de mercado em inteligência
 organizacional e ação coordenada — de forma mensurável e com supervisão humana em todo
@@ -44,6 +44,10 @@ ANALYTICS → LEARNING → (melhor conhecimento, estratégia, produto, distribui
   dedup idempotente, **scoring ICE/RICE explicável** (breakdown + razões — nunca só um
   número) e lifecycle de experimentos validado (PROPOSED → RUNNING → COMPLETED com
   decisão/learning) — CLI `geos opportunities` / `geos experiments`.
+- **Blog Publisher**: conteúdo aprovado → post markdown com front matter determinístico,
+  publicado via adapters (local headless por default; WordPress/Ghost em fases futuras)
+  — **aprovação humana obrigatória** antes de qualquer escrita (SPEC-024) — CLI
+  `geos blog prepare/publish`.
 - **Memory**: memória persistente com TTL/sensibilidade e scopes por domínio.
 - **Adoção não-destrutiva**: detecção GREENFIELD/BROWNFIELD/STANDALONE com evidências,
   capability discovery por repo, manifest e Repository Registry.
@@ -94,8 +98,8 @@ Sem `pip install`? `python -m geos.cli ...` funciona igual.
 ```
 geos/
 ├── geos/          # pacote Python (core, storage, intelligence, discovery, cli)
-├── tests/         # unittest (zero deps além de PyYAML) — 167 testes
-├── docs/geos/     # auditoria, contexto, visão, ADRs, roadmap, SPEC-001..023, 034, 039
+├── tests/         # unittest (zero deps além de PyYAML) — 183 testes
+├── docs/geos/     # auditoria, contexto, visão, ADRs, roadmap, SPEC-001..024, 034, 039
 ├── workflows/     # workflows declarativos de exemplo
 ├── examples/      # quickstart + config + docs de exemplo
 └── .github/       # CI (Linux + Windows, Python 3.11–3.13)
@@ -107,13 +111,13 @@ geos/
   [docs/geos/architecture/vision.md](docs/geos/architecture/vision.md)
 - **Roadmap** → [ROADMAP.md](ROADMAP.md) · detalhado em
   [docs/geos/roadmaps/roadmap.md](docs/geos/roadmaps/roadmap.md)
-- **Specs** → [docs/geos/specs/](docs/geos/specs/) (SPEC-001..023, 034, 039 implementadas)
+- **Specs** → [docs/geos/specs/](docs/geos/specs/) (SPEC-001..024, 034, 039 implementadas)
 - **Decisões (ADRs)** → [docs/geos/adrs/](docs/geos/adrs/)
 
 ## Desenvolvimento
 
 ```bash
-python -m unittest discover -s tests -t .   # 167 testes, stdlib
+python -m unittest discover -s tests -t .   # 183 testes, stdlib
 python -m geos.cli doctor
 ```
 

@@ -3,6 +3,41 @@
 Todas as mudanças relevantes do GEOS são registradas aqui (spec §198). Formato
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e versionamento semântico.
 
+## [0.7.0] — 2026-08-11 — Blog Publisher (SPEC-024)
+
+### Added
+
+- **Blog Publisher** (SPEC-024, spec master §75–77): transforma conteúdo aprovado em
+  posts markdown publicáveis — deterministic markdown + **front matter YAML** (title,
+  slug, date, type, status, keywords, summary, sources, mock, content_id, version).
+- **Aprovação humana obrigatória** (spec §47): `blog.publish` é
+  `HUMAN_APPROVAL_REQUIRED`; sem decisão, nada externo acontece — o post fica
+  `APPROVAL_PENDING` com approval registrado e o publish reexecutado **reusa o mesmo
+  approval pendente** (sem spam na fila de aprovações).
+- **Adapters**: protocolo `BlogAdapter` + registro por nome; `LocalMarkdownAdapter`
+  (escreve `<slug>.md` no diretório configurado, default `blog/`). WordPress/Ghost
+  ficam para fases futuras atrás do mesmo protocolo.
+- **Migration V7** (`blog_publisher`): tabela `blog_posts` (status DRAFT →
+  APPROVAL_PENDING → PUBLISHED/FAILED, slug único, publish_path/url/at, approval_id).
+- **CLI**: `geos blog prepare/list/publish [--approve] [--by]` + novo `geos content
+  draft` (produz o rascunho/body pelo CLI — antes só pelo workflow).
+- 15 novos testes (183 no total).
+
+### Fixed
+
+- **Markdown quebrado (SPEC-022, bug antigo exposto pelo publisher)**: `_build_brief`/
+  `_build_draft`/`_repurpose_body` emitiam o texto literal `\n` (backslash+n) em vez
+  de quebras de linha reais — posts publicados não renderizavam. Corrigido (19
+  sequências) com regressão que garante markdown renderizável.
+- **Decisão de aprovação só após o publish ter sucesso** (review): adapter que falha →
+  post `FAILED` + approval permanece `PENDING` (a trilha reflete o desfecho real).
+- **Trilha de aprovação preservada em falha**: post `FAILED` mantém `approval_id`.
+- Contrato de adapters: `get_adapter` tolera adapters sem arg `publish_dir`.
+
+### Changed
+
+- README (183 testes, features de blog), roadmap SPEC-024 ✅, catálogo de automações.
+
 ## [0.6.0] — 2026-08-11 — Opportunity + Experiment Engine (SPEC-034)
 
 ### Added

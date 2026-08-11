@@ -232,10 +232,10 @@ def _build_brief(topic: str, content_type: str, audience: str | None,
         "Próximos passos",
     ]
     return (
-        f"Brief determinístico (mock) para {content_type}: '{topic}'.\\n"
-        f"Audience: {audience or 'a definir'}. Objective: {objective or 'educate'}.\\n"
-        f"Outline:\\n" + "\\n".join(f"- {s}" for s in steps) +
-        f"\\nCTA: {cta or 'Falar com especialista'}"
+        f"Brief determinístico (mock) para {content_type}: '{topic}'.\n"
+        f"Audience: {audience or 'a definir'}. Objective: {objective or 'educate'}.\n"
+        f"Outline:\n" + "\n".join(f"- {s}" for s in steps) +
+        f"\nCTA: {cta or 'Falar com especialista'}"
     )
 
 
@@ -243,11 +243,11 @@ def _build_draft(item: dict[str, Any]) -> str:
     topic = str(item.get("topic") or item["title"])
     brief = str(item.get("brief") or "")
     return (
-        f"# {item['title']}\\n\\n"
-        f"Conteúdo determinístico (mock) sobre: {topic}.\\n"
-        f"Tipo: {item['content_type']} · Status: {item['status']}.\\n\\n"
-        f"## Contexto\\n{brief.splitlines()[0] if brief else ''}\\n\\n"
-        f"## Estrutura\\n1. O problema\\n2. Processo e evidência\\n3. Aplicação\\n\\n"
+        f"# {item['title']}\n\n"
+        f"Conteúdo determinístico (mock) sobre: {topic}.\n"
+        f"Tipo: {item['content_type']} · Status: {item['status']}.\n\n"
+        f"## Contexto\n{brief.splitlines()[0] if brief else ''}\n\n"
+        f"## Estrutura\n1. O problema\n2. Processo e evidência\n3. Aplicação\n\n"
         f"_Este é um rascunho de template (mock: True); requer revisão humana e "
         f"fontes externas antes de qualquer uso externo._"
     )
@@ -263,7 +263,7 @@ def _repurpose_body(item: dict[str, Any], target_type: str) -> str:
         )
     if target_type == "newsletter":
         return (
-            f"[mock-newsletter] Tema: {topic}.\\nResumo do artigo '{title}' + CTA. "
+            f"[mock-newsletter] Tema: {topic}.\nResumo do artigo '{title}' + CTA. "
             f"(repurposed, mock: True)"
         )
     return (

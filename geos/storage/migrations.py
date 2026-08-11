@@ -360,6 +360,31 @@ CREATE INDEX IF NOT EXISTS idx_content_versions_content ON content_versions(cont
 """
 
 
+V7_BLOG = """
+CREATE TABLE IF NOT EXISTS blog_posts (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  content_id TEXT REFERENCES content(id),
+  slug TEXT NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  front_matter TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'DRAFT',
+  adapter TEXT NOT NULL DEFAULT 'local',
+  publish_dir TEXT,
+  published_path TEXT,
+  published_url TEXT,
+  published_at TEXT,
+  approval_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_blog_slug ON blog_posts(slug);
+CREATE INDEX IF NOT EXISTS idx_blog_status ON blog_posts(status);
+CREATE INDEX IF NOT EXISTS idx_blog_content ON blog_posts(content_id);
+"""
+
+
 MIGRATIONS: list[tuple[int, str, str]] = [
     (1, "bootstrap", V1_BOOTSTRAP),
     (2, "knowledge_phase1", V2_KNOWLEDGE_PHASE1),
@@ -367,6 +392,7 @@ MIGRATIONS: list[tuple[int, str, str]] = [
     (4, "model_provenance", V4_MODEL_PROVENANCE),
     (5, "seo_engine", V5_SEO),
     (6, "opportunities_experiments", V6_OPPORTUNITIES),
+    (7, "blog_publisher", V7_BLOG),
 ]
 
 MAX_VERSION = max(v for v, _, _ in MIGRATIONS)

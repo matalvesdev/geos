@@ -135,6 +135,40 @@ class CliTests(unittest.TestCase):
             self.assertIn("sources (", r.stdout)
             self.assertIn("OBSERVATION", r.stdout)
 
+    def test_blog_prepare_and_publish_cli(self) -> None:
+        """blog prepare → publish gated → publish approved (SPEC-024)."""
+        with TempDir() as tmp:
+            (tmp / "blog").mkdir()
+            self.assertEqual(run_cli(tmp, "db", "migrate").returncode, 0)
+            created = run_cli(tmp, "content", "create", "Como fazer cash application",
+                              "--type", "blog_post", "--keywords", "cash application")
+            self.assertEqual(created.returncode, 0, created.stderr)
+            content_id = created.stdout.split()[1]
+            for status in ("BRIEFED",):
+                proc = run_cli(tmp, "content", "status", content_id, status)
+                self.assertEqual(proc.returncode, 0, proc.stderr)
+            drafted = run_cli(tmp, "content", "draft", content_id)
+            self.assertEqual(drafted.returncode, 0, drafted.stderr)
+            approved = run_cli(tmp, "content", "status", content_id, "APPROVED")
+            self.assertEqual(approved.returncode, 0, approved.stderr)
+
+            prepared = run_cli(tmp, "blog", "prepare", content_id, "--dir", "blog")
+            self.assertEqual(prepared.returncode, 0, prepared.stderr)
+            self.assertIn("DRAFT", prepared.stdout)
+            post_id = prepared.stdout.split()[1]
+
+            gated = run_cli(tmp, "blog", "publish", post_id)
+            self.assertEqual(gated.returncode, 0, gated.stderr)
+            self.assertIn("APPROVAL_PENDING", gated.stdout)
+            self.assertFalse((tmp / "blog" / "como-fazer-cash-application.md").is_file())
+
+            published = run_cli(tmp, "blog", "publish", post_id, "--approve", "--by", "editor")
+            self.assertEqual(published.returncode, 0, published.stderr)
+            self.assertIn("PUBLISHED", published.stdout)
+            target = tmp / "blog" / "como-fazer-cash-application.md"
+            self.assertTrue(target.is_file())
+            self.assertIn("slug:", target.read_text(encoding="utf-8"))
+
     def test_plan_experimental(self) -> None:
         with TempDir() as tmp:
             (tmp / "services" / "api").mkdir(parents=True)

@@ -648,6 +648,20 @@ def cmd_content_create(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_content_draft(args: argparse.Namespace) -> int:
+    from .domains.content import ContentEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        item = ContentEngine(db).produce_draft(args.content_id)
+        print(f"{item['id']}: {item['status']} (version={item['version']}, mock={item['mock']})")
+    finally:
+        db.close()
+    return 0
+
+
 def cmd_content_score(args: argparse.Namespace) -> int:
     from .domains.content import ContentEngine
 
@@ -897,6 +911,66 @@ def cmd_experiments_complete(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_blog_prepare(args: argparse.Namespace) -> int:
+    from .domains.blog import BlogEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        # Resolve the publish dir against the workspace root (default: blog/).
+        publish_dir = args.dir or "blog"
+        if not Path(publish_dir).is_absolute():
+            publish_dir = str(Path(args.root) / publish_dir)
+        engine = BlogEngine(db, publish_dir=publish_dir, approvals=settings.approvals)
+        post = engine.prepare(args.content_id, adapter=args.adapter)
+        print(f"prepared {post['id']} | {post['status']} | slug={post['slug']}")
+        print(f"  adapter={post['adapter']} dir={publish_dir}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_blog_list(args: argparse.Namespace) -> int:
+    from .domains.blog import BlogEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        posts = BlogEngine(db, approvals=settings.approvals).list(status=args.status)
+        print(f"{len(posts)} blog post(s)")
+        for post in posts:
+            print(f"  {post['status']:16s} {post['id']} {post['slug']:40s} "
+                  f"{post['title'][:40]}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_blog_publish(args: argparse.Namespace) -> int:
+    from .domains.blog import BlogEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        engine = BlogEngine(db, approvals=settings.approvals)
+        post = engine.publish(args.post_id, approve=args.approve,
+                              decided_by=args.by or "cli")
+        if post["status"] == "APPROVAL_PENDING":
+            print(f"{post['id']}: {post['status']} — aprovação humana obrigatória "
+                  f"(blog.publish, SPEC-024 R1)")
+            print(f"  approval_id={post.get('approval_id')} — reexecute com --approve após decidir")
+        else:
+            print(f"{post['id']}: {post['status']}")
+            print(f"  path: {post.get('published_path')} url: {post.get('published_url')}")
+            print(f"  approval_id={post.get('approval_id')}")
+    finally:
+        db.close()
+    return 0
+
+
 def cmd_repo(args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
     registry = RepositoryRegistry(root / REGISTRY_PATH)
@@ -1082,6 +1156,24 @@ def main(argv: list[str] | None = None) -> int:
         func=cmd_approvals_list
     )
 
+    p_blog = sub.add_parser("blog", help="blog publisher (SPEC-024)")
+    p_blog_sub = p_blog.add_subparsers(dest="blog_action", required=True)
+    p_bprepare = p_blog_sub.add_parser("prepare", help="preparar post de conteúdo aprovado")
+    p_bprepare.add_argument("content_id")
+    p_bprepare.add_argument("--adapter", default="local", help="adapter (default: local)")
+    p_bprepare.add_argument("--dir", default=None,
+                            help="publish dir (default: blog/ do workspace)")
+    p_bprepare.set_defaults(func=cmd_blog_prepare)
+    p_blist = p_blog_sub.add_parser("list", help="list blog posts")
+    p_blist.add_argument("--status", default=None)
+    p_blist.set_defaults(func=cmd_blog_list)
+    p_bpublish = p_blog_sub.add_parser("publish", help="publicar (aprovação humana obrigatória)")
+    p_bpublish.add_argument("post_id")
+    p_bpublish.add_argument("--approve", action="store_true",
+                            help="registrar decisão humana e publicar")
+    p_bpublish.add_argument("--by", default=None, help="quem aprovou (default: cli)")
+    p_bpublish.set_defaults(func=cmd_blog_publish)
+
     p_content = sub.add_parser("content", help="content engine (SPEC-022)")
     p_content_sub = p_content.add_subparsers(dest="content_action", required=True)
     p_clist = p_content_sub.add_parser("list", help="list content items")
@@ -1095,6 +1187,9 @@ def main(argv: list[str] | None = None) -> int:
     p_ccreate.add_argument("--keywords", action="append", default=None)
     p_ccreate.add_argument("--workflow", default=None)
     p_ccreate.set_defaults(func=cmd_content_create)
+    p_cdraft = p_content_sub.add_parser("draft", help="produzir rascunho (gera body, mock)")
+    p_cdraft.add_argument("content_id")
+    p_cdraft.set_defaults(func=cmd_content_draft)
     p_cscore = p_content_sub.add_parser("score", help="recompute deterministic score")
     p_cscore.add_argument("content_id")
     p_cscore.set_defaults(func=cmd_content_score)

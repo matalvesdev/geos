@@ -1116,6 +1116,90 @@ class ContentRepository:
 
 
 # ---------------------------------------------------------------- Factory
+class BlogRepository:
+    """Published blog posts (SPEC-024): deterministic markdown + front matter,
+    gated by human approval. One publish per post (idempotent by design).
+    """
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def create(self, content_id: str | None, slug: str, title: str, body: str,
+               front_matter: dict[str, Any], adapter: str = "local",
+               publish_dir: str | None = None) -> str:
+        post_id = new_id()
+        now = now_iso()
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO blog_posts (id, workspace_id, content_id, slug, title, body,"
+                " front_matter, status, adapter, publish_dir, created_at, updated_at)"
+                " VALUES (?, 'default', ?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?)",
+                (post_id, content_id, slug, title, body,
+                 json.dumps(front_matter, ensure_ascii=False), adapter, publish_dir,
+                 now, now),
+            )
+        return post_id
+
+    def get(self, post_id: str) -> dict[str, Any] | None:
+        row = self._db.conn_checked.execute(
+            "SELECT * FROM blog_posts WHERE id = ?", (post_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        item = dict(row)
+        try:
+            item["front_matter"] = json.loads(item["front_matter"] or "{}")
+        except json.JSONDecodeError:
+            item["front_matter"] = {}
+        return item
+
+    def by_slug(self, slug: str) -> dict[str, Any] | None:
+        row = self._db.conn_checked.execute(
+            "SELECT * FROM blog_posts WHERE slug = ?", (slug,)
+        ).fetchone()
+        if row is None:
+            return None
+        item = dict(row)
+        try:
+            item["front_matter"] = json.loads(item["front_matter"] or "{}")
+        except json.JSONDecodeError:
+            item["front_matter"] = {}
+        return item
+
+    def list(self, status: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+        q = "SELECT * FROM blog_posts"
+        params: list[Any] = []
+        if status:
+            q += " WHERE status = ?"
+            params.append(status)
+        q += " ORDER BY updated_at DESC LIMIT ?"
+        params.append(limit)
+        rows = self._db.conn_checked.execute(q, params).fetchall()
+        items = []
+        for row in rows:
+            item = dict(row)
+            try:
+                item["front_matter"] = json.loads(item["front_matter"] or "{}")
+            except json.JSONDecodeError:
+                item["front_matter"] = {}
+            items.append(item)
+        return items
+
+    def update(self, post_id: str, **fields: Any) -> None:
+        allowed = {"status", "adapter", "publish_dir", "published_path",
+                   "published_url", "published_at", "approval_id"}
+        updates = {k: v for k, v in fields.items() if k in allowed and v is not None}
+        if not updates:
+            return
+        set_clauses = [f"{k} = ?" for k in updates]
+        set_clauses.append("updated_at = ?")
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                f"UPDATE blog_posts SET {', '.join(set_clauses)} WHERE id = ?",
+                [*updates.values(), now_iso(), post_id],
+            )
+
+
 class RepoFactory:
     """Single access point to repositories for a given Database (SPEC-003 R3.1)."""
 
@@ -1133,6 +1217,7 @@ class RepoFactory:
         self.seo = SeoRepository(db)
         self.opportunities = OpportunityRepository(db)
         self.experiments = ExperimentRepository(db)
+        self.blog = BlogRepository(db)
 
 
 def _fts_query(query: str) -> str:
