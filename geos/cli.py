@@ -744,6 +744,159 @@ def cmd_seo_issues(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_opportunities_collect(args: argparse.Namespace) -> int:
+    from .domains.growth import OpportunityEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        created = OpportunityEngine(db).collect()
+        print(f"opportunities collect: research={created['research']} "
+              f"seo={created['seo']} skipped={created['skipped']}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_opportunities_list(args: argparse.Namespace) -> int:
+    from .domains.growth import OpportunityEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        items = OpportunityEngine(db).list(method=args.method, top=args.top,
+                                           status=args.status)
+        print(f"{len(items)} opportunity(ies) — scoring: {args.method}")
+        for item in items:
+            score = f"{item.get('score'):.3f}" if item.get("score") is not None else "-"
+            print(f"  [{score:8s}] {item['id']} | {item['source']:10s} {item['status']:12s} "
+                  f"{item['problem'][:60]}")
+        if args.verbose:
+            for item in items:
+                breakdown = item.get("breakdown") or {}
+                print(f"      {item['id']} breakdown={breakdown.get('formula', '')}")
+                for key, value in breakdown.items():
+                    if key not in ("method", "formula", "score", "reasons"):
+                        print(f"        {key}: {value}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_opportunities_create(args: argparse.Namespace) -> int:
+    from .domains.growth import OpportunityEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        item = OpportunityEngine(db).create(
+            problem=args.problem, audience=args.audience, evidence=args.evidence,
+            impact=args.impact, confidence=args.confidence, effort=args.effort,
+            reach=args.reach,
+        )
+        print(f"created {item['id']} | {item['status']}")
+        print(f"  {item['problem']}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_opportunities_score(args: argparse.Namespace) -> int:
+    from .domains.growth import OpportunityEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        engine = OpportunityEngine(db)
+        if any(v is not None for v in (args.impact, args.confidence, args.effort,
+                                       args.reach)):
+            engine.update_components(args.opportunity_id, impact=args.impact,
+                                     confidence=args.confidence, effort=args.effort,
+                                     reach=args.reach)
+        item = engine.score(args.opportunity_id, method=args.method)
+        breakdown = item.get("breakdown") or {}
+        print(f"score ({args.method}) = {item['score']}")
+        print(f"  formula: {breakdown.get('formula')}")
+        for key, value in breakdown.items():
+            if key not in ("method", "formula", "score", "reasons"):
+                print(f"  {key}: {value}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_experiments_create(args: argparse.Namespace) -> int:
+    from .domains.growth import ExperimentEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        item = ExperimentEngine(db).from_opportunity(
+            args.opportunity_id, primary_metric=args.metric, change=args.change,
+            hypothesis=args.hypothesis,
+        )
+        print(f"created {item['id']} | {item['status']} | metric={item['primary_metric']}")
+        print(f"  hipótese: {item['hypothesis'][:100]}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_experiments_list(args: argparse.Namespace) -> int:
+    from .domains.growth import ExperimentEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        items = ExperimentEngine(db).list(status=args.status)
+        print(f"{len(items)} experimento(s)")
+        for item in items:
+            decision = item.get("decision") or ""
+            print(f"  {item['status']:10s} {item['primary_metric']:30s} "
+                  f"{item['hypothesis'][:50]} {decision}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_experiments_transition(args: argparse.Namespace) -> int:
+    from .domains.growth import ExperimentEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        item = ExperimentEngine(db).transition(args.experiment_id, args.status)
+        print(f"{item['id']}: {item['status']}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_experiments_complete(args: argparse.Namespace) -> int:
+    from .domains.growth import ExperimentEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        item = ExperimentEngine(db).complete(
+            args.experiment_id, result=args.result, analysis=args.analysis or "",
+            decision=args.decision, learning=args.learning,
+        )
+        print(f"{item['id']}: COMPLETED | decision={item['decision']}")
+        print(f"  learning: {item['learning'][:120]}")
+    finally:
+        db.close()
+    return 0
+
+
 def cmd_repo(args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
     registry = RepositoryRegistry(root / REGISTRY_PATH)
@@ -846,6 +999,59 @@ def main(argv: list[str] | None = None) -> int:
     p_issues.add_argument("--severity", choices=["critical", "warning", "info"])
     p_issues.add_argument("--limit", type=int, default=50)
     p_issues.set_defaults(func=cmd_seo_issues)
+
+    p_opportunities = sub.add_parser("opportunities", help="opportunity engine (SPEC-034)")
+    p_opp_sub = p_opportunities.add_subparsers(dest="opportunities_action", required=True)
+    p_opp_sub.add_parser("collect", help="criar oportunidades de research + SEO gaps").set_defaults(
+        func=cmd_opportunities_collect
+    )
+    p_opp_list = p_opp_sub.add_parser("list", help="oportunidades priorizadas")
+    p_opp_list.add_argument("--method", choices=["ice", "rice"], default="rice")
+    p_opp_list.add_argument("--top", type=int, default=None)
+    p_opp_list.add_argument("--status", default=None)
+    p_opp_list.add_argument("--verbose", action="store_true")
+    p_opp_list.set_defaults(func=cmd_opportunities_list)
+    p_opp_create = p_opp_sub.add_parser("create", help="criar oportunidade manual")
+    p_opp_create.add_argument("problem")
+    p_opp_create.add_argument("--audience", default=None)
+    p_opp_create.add_argument("--evidence", default=None)
+    p_opp_create.add_argument("--impact", type=float, default=None)
+    p_opp_create.add_argument("--confidence", type=float, default=None)
+    p_opp_create.add_argument("--effort", type=float, default=None)
+    p_opp_create.add_argument("--reach", type=float, default=None)
+    p_opp_create.set_defaults(func=cmd_opportunities_create)
+    p_opp_score = p_opp_sub.add_parser("score", help="scoring ICE/RICE explicável")
+    p_opp_score.add_argument("opportunity_id")
+    p_opp_score.add_argument("--method", choices=["ice", "rice"], default="ice")
+    p_opp_score.add_argument("--impact", type=float, default=None)
+    p_opp_score.add_argument("--confidence", type=float, default=None)
+    p_opp_score.add_argument("--effort", type=float, default=None)
+    p_opp_score.add_argument("--reach", type=float, default=None)
+    p_opp_score.set_defaults(func=cmd_opportunities_score)
+
+    p_experiments = sub.add_parser("experiments", help="experiment engine (SPEC-034)")
+    p_exp_sub = p_experiments.add_subparsers(dest="experiments_action", required=True)
+    p_exp_create = p_exp_sub.add_parser("create", help="criar experimento de uma oportunidade")
+    p_exp_create.add_argument("opportunity_id")
+    p_exp_create.add_argument("--metric", required=True, help="primary metric")
+    p_exp_create.add_argument("--change", default=None)
+    p_exp_create.add_argument("--hypothesis", default=None)
+    p_exp_create.set_defaults(func=cmd_experiments_create)
+    p_exp_list = p_exp_sub.add_parser("list", help="listar experimentos")
+    p_exp_list.add_argument("--status", default=None)
+    p_exp_list.set_defaults(func=cmd_experiments_list)
+    p_exp_trans = p_exp_sub.add_parser("status", help="transicionar status (RUNNING/CANCELLED)")
+    p_exp_trans.add_argument("experiment_id")
+    p_exp_trans.add_argument("status", choices=["RUNNING", "CANCELLED"])
+    p_exp_trans.set_defaults(func=cmd_experiments_transition)
+    p_exp_complete = p_exp_sub.add_parser("complete", help="concluir com decisão e learning")
+    p_exp_complete.add_argument("experiment_id")
+    p_exp_complete.add_argument("--result", required=True)
+    p_exp_complete.add_argument("--analysis", default=None)
+    p_exp_complete.add_argument("--decision", choices=["ADOPT", "REJECT", "ITERATE"],
+                                required=True)
+    p_exp_complete.add_argument("--learning", required=True)
+    p_exp_complete.set_defaults(func=cmd_experiments_complete)
 
     p_models = sub.add_parser("models", help="model providers (spec §35 / SPEC-039)")
     p_models_sub = p_models.add_subparsers(dest="models_action", required=True)

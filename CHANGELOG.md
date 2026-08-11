@@ -3,6 +3,42 @@
 Todas as mudanças relevantes do GEOS são registradas aqui (spec §198). Formato
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e versionamento semântico.
 
+## [0.6.0] — 2026-08-11 — Opportunity + Experiment Engine (SPEC-034)
+
+### Added
+
+- **Opportunity Engine** (SPEC-034, spec §102): coleta oportunidades de **research
+  insights** (CONTENT_OPPORTUNITY/KNOWLEDGE_GAP) + **SEO content gaps** com dedup
+  idempotente **por problema** (ref `research:{id}:{slug}` — múltiplas oportunidades
+  do mesmo relatório são todas criadas, não só a primeira).
+- **Scoring explicável ICE/RICE**: `impact × confidence × ease / 100` (ICE) e
+  `reach × impact × confidence / effort` (RICE), componentes com defaults neutros
+  honestos, breakdown persistido com fórmula + razões por componente — score nunca
+  é só um número (spec §114). Priorização por score desc, top-N, filtro por status.
+- **Experiment Engine** (spec §101): de oportunidade OPEN → experimento PROPOSED
+  (hipótese de template ancorada nas evidências, métrica primária, change, audience),
+  transições validadas (PROPOSED → RUNNING → COMPLETED, CANCELLED), complete exige
+  `result` + `learning`, decisão ADOPT/REJECT/ITERATE, eventos `experiment.proposed`/
+  `experiment.completed`; oportunidade marcada EXPERIMENTING.
+- **Migration V6** (`growth`): tabelas `opportunities` (status OPEN/EXPERIMENTING,
+  componentes, score/score_method/breakdown JSON) + `experiments`.
+- **CLI**: `geos opportunities collect/list/create/score` e `geos experiments
+  create/status/complete/list`.
+- 13 novos testes (167 no total).
+
+### Fixed
+
+- **Dedup por linha → por problema** (review): relatório de research com várias
+  oportunidades perdia todas exceto a primeira (`ref = research:{id}`); agora
+  `research:{id}:{slug(problema)}` (SPEC-034 R2).
+- **Score stale** (review): `update_components` invalidava a pontuação cacheada
+  (score/score_method/breakdown → NULL) — mudança de componente sempre recomputa;
+  regressão cobre `score ice → update impact → list` recomputa 3.92 → 4.9.
+
+### Changed
+
+- README (167 testes, features de growth), roadmap SPEC-034 ✅, catálogo de automações.
+
 ## [0.5.0] — 2026-08-11 — SEO Engine (SPEC-023)
 
 ### Added

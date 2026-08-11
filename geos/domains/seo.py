@@ -116,18 +116,19 @@ class SeoEngine:
     def audit_content(self) -> list[SeoIssue]:
         issues: list[SeoIssue] = []
         items = self._content.list(limit=2000)
-        if not items:
-            return [SeoIssue(
-                "info", "coverage", None,
-                "Nenhum objeto de conteúdo",
-                "A tabela `content` está vazia (use `geos content create`).",
-                "geos content create \"<tópico>\"" )]
         topics_with_content = {
             str(i.get("topic") or "").strip().lower()
             for i in items if (i.get("topic") or "").strip()
         }
+        if not items:
+            issues.append(SeoIssue(
+                "info", "coverage", None,
+                "Nenhum objeto de conteúdo",
+                "A tabela `content` está vazia (use `geos content create`).",
+                "geos content create \"<tópico>\""))
 
-        # gaps: TOPIC nodes from the graph without a content item
+        # gaps: TOPIC nodes from the graph without a content item (computed
+        # even when the content table is empty — the gaps are the finding)
         for node in self._knowledge.list_nodes(node_type="TOPIC", limit=500):
             name = str(node.get("name") or "").strip()
             if not name or len(name) < 3:

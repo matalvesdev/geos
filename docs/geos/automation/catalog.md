@@ -25,6 +25,9 @@
 | A-015 | content-repurpose | Content | CLI/workflow | draft → variantes por canal | ContentEngine.repurpose | none (internal, mock) | variants, sources | ✅ IMPLEMENTED (v0.3.0) |
 | A-016 | research-synthesis | Research | CLI/workflow | question+fontes → síntese com citações [F#] | ResearchEngine + ModelProvider (SPEC-039) | none (read-only) | research, model, mock | ✅ IMPLEMENTED (v0.4.0; mock default, LLM se `models:` configurado) |
 | A-017 | seo-audit | SEO | CLI `geos seo audit` | docs+content → issues persistidas | SeoEngine (determinístico, SPEC-023) | none (read-only) | audits, issues | ✅ IMPLEMENTED (v0.5.0) |
+| A-018 | opportunity-collect | Growth | CLI `geos opportunities collect` | research insights + SEO gaps → opportunities (dedup por problema) | OpportunityEngine (SPEC-034) | none (read-only) | opportunities | ✅ IMPLEMENTED (v0.6.0) |
+| A-019 | opportunity-score | Growth | CLI `geos opportunities score` | ICE/RICE explicável (breakdown + razões) | OpportunityEngine (SPEC-034) | none (read-only) | score, breakdown | ✅ IMPLEMENTED (v0.6.0) |
+| A-020 | experiment-lifecycle | Growth | CLI `geos experiments` | oportunidade → hipótese → PROPOSED/RUNNING/COMPLETED + decisão/learning | ExperimentEngine (SPEC-034) | none (read-only; statuses internos) | experiments | ✅ IMPLEMENTED (v0.6.0) |
 
 ## Failure modes (all automations)
 

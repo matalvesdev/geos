@@ -753,6 +753,177 @@ class ResearchRepository:
         return [dict(r) for r in rows]
 
 
+# ---------------------------------------------------------------- Growth (SPEC-034)
+class OpportunityRepository:
+    """Prioritized opportunities with explainable ICE/RICE breakdowns."""
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def create(self, source: str, problem: str, source_ref: str | None = None,
+               audience: str | None = None, evidence: str | None = None,
+               impact: float | None = None, confidence: float | None = None,
+               effort: float | None = None, reach: float | None = None,
+               strategic_alignment: float | None = None,
+               recommended_action: str | None = None, score: float | None = None,
+               score_method: str | None = None,
+               breakdown: dict[str, Any] | None = None) -> str:
+        opportunity_id = new_id()
+        now = now_iso()
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO opportunities (id, workspace_id, source, source_ref, problem,"
+                " audience, evidence, impact, confidence, effort, reach,"
+                " strategic_alignment, recommended_action, score, score_method, breakdown,"
+                " status, created_at, updated_at)"
+                " VALUES (?, 'default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, ?)",
+                (opportunity_id, source, source_ref, problem, audience, evidence, impact,
+                 confidence, effort, reach, strategic_alignment, recommended_action, score,
+                 score_method, json.dumps(breakdown or {}, ensure_ascii=False), now, now),
+            )
+        return opportunity_id
+
+    def update_components(self, opportunity_id: str, **components: Any) -> None:
+        """Update scoring components (impact/confidence/effort/reach/alignment).
+
+        Component changes invalidate the cached score: the stored score/breakdown
+        is cleared so the next scoring pass recomputes (SPEC-034 R3).
+        """
+        allowed = {"impact", "confidence", "effort", "reach", "strategic_alignment"}
+        updates = {k: v for k, v in components.items() if k in allowed and v is not None}
+        if not updates:
+            return
+        sets = [f"{k} = ?" for k in updates]
+        sets.append("score = NULL")
+        sets.append("score_method = NULL")
+        sets.append("breakdown = '{}'")
+        sets.append("updated_at = ?")
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                f"UPDATE opportunities SET {', '.join(sets)} WHERE id = ?",
+                [*updates.values(), now_iso(), opportunity_id],
+            )
+
+    def get(self, opportunity_id: str) -> dict[str, Any] | None:
+        row = self._db.conn_checked.execute(
+            "SELECT * FROM opportunities WHERE id = ?", (opportunity_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        item = dict(row)
+        try:
+            item["breakdown"] = json.loads(item["breakdown"] or "{}")
+        except json.JSONDecodeError:
+            item["breakdown"] = {}
+        return item
+
+    def list(self, status: str | None = None, limit: int = 200) -> list[dict[str, Any]]:
+        q = "SELECT * FROM opportunities"
+        params: list[Any] = []
+        if status:
+            q += " WHERE status = ?"
+            params.append(status)
+        q += " ORDER BY score DESC NULLS LAST, created_at DESC LIMIT ?"
+        params.append(limit)
+        rows = self._db.conn_checked.execute(q, params).fetchall()
+        result = []
+        for r in rows:
+            item = dict(r)
+            try:
+                item["breakdown"] = json.loads(item["breakdown"] or "{}")
+            except json.JSONDecodeError:
+                item["breakdown"] = {}
+            result.append(item)
+        return result
+
+    def update_status(self, opportunity_id: str, status: str) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "UPDATE opportunities SET status = ?, updated_at = ? WHERE id = ?",
+                (status, now_iso(), opportunity_id),
+            )
+
+    def update_score(self, opportunity_id: str, score: float, method: str,
+                     breakdown: dict[str, Any]) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "UPDATE opportunities SET score = ?, score_method = ?, breakdown = ?,"
+                " updated_at = ? WHERE id = ?",
+                (score, method, json.dumps(breakdown, ensure_ascii=False),
+                 now_iso(), opportunity_id),
+            )
+
+
+class ExperimentRepository:
+    """Experiments with hypothesis, metrics, guardrails, decision and learning."""
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def create(self, opportunity_id: str, problem: str, hypothesis: str,
+               primary_metric: str, evidence: str | None = None, change: str | None = None,
+               audience: str | None = None, secondary_metrics: list[str] | None = None,
+               guardrails: list[str] | None = None, expected_impact: float | None = None,
+               confidence: float | None = None, effort: float | None = None) -> str:
+        experiment_id = new_id()
+        now = now_iso()
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO experiments (id, workspace_id, opportunity_id, problem,"
+                " evidence, hypothesis, change, audience, primary_metric,"
+                " secondary_metrics, guardrails, expected_impact, confidence, effort,"
+                " status, created_at, updated_at)"
+                " VALUES (?, 'default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PROPOSED', ?, ?)",
+                (experiment_id, opportunity_id, problem, evidence, hypothesis, change,
+                 audience, primary_metric, json.dumps(secondary_metrics or [],
+                                                      ensure_ascii=False),
+                 json.dumps(guardrails or [], ensure_ascii=False), expected_impact,
+                 confidence, effort, now, now),
+            )
+        return experiment_id
+
+    def get(self, experiment_id: str) -> dict[str, Any] | None:
+        row = self._db.conn_checked.execute(
+            "SELECT * FROM experiments WHERE id = ?", (experiment_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        item = dict(row)
+        for key in ("secondary_metrics", "guardrails"):
+            try:
+                item[key] = json.loads(item[key] or "[]")
+            except json.JSONDecodeError:
+                item[key] = []
+        return item
+
+    def list(self, status: str | None = None, limit: int = 200) -> list[dict[str, Any]]:
+        q = "SELECT * FROM experiments"
+        params: list[Any] = []
+        if status:
+            q += " WHERE status = ?"
+            params.append(status)
+        q += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        rows = self._db.conn_checked.execute(q, params).fetchall()
+        return [dict(r) for r in rows]
+
+    def update_status(self, experiment_id: str, status: str) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "UPDATE experiments SET status = ?, updated_at = ? WHERE id = ?",
+                (status, now_iso(), experiment_id),
+            )
+
+    def complete(self, experiment_id: str, result: str, analysis: str,
+                 decision: str, learning: str) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "UPDATE experiments SET status = 'COMPLETED', result = ?, analysis = ?,"
+                " decision = ?, learning = ?, updated_at = ? WHERE id = ?",
+                (result, analysis, decision, learning, now_iso(), experiment_id),
+            )
+
+
 # ---------------------------------------------------------------- SEO (SPEC-023)
 class SeoRepository:
     """Persisted SEO audits + issues (history across runs, SPEC-023)."""
@@ -960,6 +1131,8 @@ class RepoFactory:
         self.research = ResearchRepository(db)
         self.content = ContentRepository(db)
         self.seo = SeoRepository(db)
+        self.opportunities = OpportunityRepository(db)
+        self.experiments = ExperimentRepository(db)
 
 
 def _fts_query(query: str) -> str:

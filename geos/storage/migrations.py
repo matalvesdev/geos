@@ -223,6 +223,59 @@ CREATE INDEX IF NOT EXISTS idx_insights_type ON insights(insight_type);
 """
 
 
+V6_OPPORTUNITIES = """
+CREATE TABLE IF NOT EXISTS opportunities (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  source TEXT NOT NULL,
+  source_ref TEXT,
+  problem TEXT NOT NULL,
+  audience TEXT,
+  evidence TEXT,
+  impact REAL,
+  confidence REAL,
+  effort REAL,
+  reach REAL,
+  strategic_alignment REAL,
+  recommended_action TEXT,
+  score REAL,
+  score_method TEXT,
+  breakdown TEXT,
+  status TEXT NOT NULL DEFAULT 'OPEN',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_opportunities_status ON opportunities(status);
+CREATE INDEX IF NOT EXISTS idx_opportunities_score ON opportunities(score);
+
+CREATE TABLE IF NOT EXISTS experiments (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  opportunity_id TEXT REFERENCES opportunities(id),
+  problem TEXT NOT NULL,
+  evidence TEXT,
+  hypothesis TEXT NOT NULL,
+  change TEXT,
+  audience TEXT,
+  primary_metric TEXT NOT NULL,
+  secondary_metrics TEXT,
+  guardrails TEXT,
+  expected_impact REAL,
+  confidence REAL,
+  effort REAL,
+  status TEXT NOT NULL DEFAULT 'PROPOSED',
+  result TEXT,
+  analysis TEXT,
+  decision TEXT,
+  learning TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_experiments_status ON experiments(status);
+CREATE INDEX IF NOT EXISTS idx_experiments_opportunity ON experiments(opportunity_id);
+"""
+
+
 V5_SEO = """
 CREATE TABLE IF NOT EXISTS seo_audits (
   id TEXT PRIMARY KEY,
@@ -313,6 +366,7 @@ MIGRATIONS: list[tuple[int, str, str]] = [
     (3, "content_phase2", V3_CONTENT_PHASE2),
     (4, "model_provenance", V4_MODEL_PROVENANCE),
     (5, "seo_engine", V5_SEO),
+    (6, "opportunities_experiments", V6_OPPORTUNITIES),
 ]
 
 MAX_VERSION = max(v for v, _, _ in MIGRATIONS)
