@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "geos"
+version = "0.1.0"
+description = "GEOS — Growth, Education & Organizational System. Local-first agentic organizational growth platform."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+dependencies = [
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = []
+
+[project.urls]
+Homepage = "https://github.com/matalvesdev/geos"
+Repository = "https://github.com/matalvesdev/geos"
+Documentation = "https://github.com/matalvesdev/geos/tree/main/docs/geos"
+Changelog = "https://github.com/matalvesdev/geos/blob/main/CHANGELOG.md"
+
+[project.classifiers]
+Development Status = "3 - Alpha"
+Environment = "Console"
+Intended Audience = "Developers"
+License = "OSI Approved :: Apache Software License"
+Operating System = "OS Independent"
+Programming Language = "Python :: 3"
+Programming Language = "Python :: 3.11"
+Programming Language = "Python :: 3.12"
+Programming Language = "Python :: 3.13"
+Topic = "Software Development :: Libraries :: Application Frameworks"
+
+[project.scripts]
+geos = "geos.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["geos*"]
+
+[tool.setuptools.package-data]
+geos = ["py.typed"]

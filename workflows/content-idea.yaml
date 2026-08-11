@@ -1,0 +1,27 @@
+# Workflow de exemplo (SPEC-007): proposta de conteúdo com gate de aprovação obrigatório.
+# Rode com: geos workflows run content-idea --approve publish
+workflow:
+  id: content-idea
+  description: "Pesquisa -> brief -> rascunho com aprovação obrigatória para publicar."
+  trigger:
+    kind: manual
+  steps:
+    - id: research
+      type: agent
+      agent: research.summary
+      input:
+        topic: "conciliação bancária"
+    - id: brief
+      type: agent
+      agent: content.draft
+      input:
+        topic: "$ref steps.research.topic"
+    - id: publish
+      type: approval
+      approval:
+        mode: required
+    - id: social
+      type: agent
+      agent: social.draft
+      input:
+        title: "$ref steps.brief.title"

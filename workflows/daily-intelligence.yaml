@@ -1,0 +1,40 @@
+# Workflow de exemplo (SPEC-007): daily-growth-intelligence (esboço, determinístico).
+# ATENÇÃO: o trigger cron é declarativo — o wiring do trigger com o Scheduler ainda não
+# existe (roadmap SPEC-006); execute manualmente com `geos workflows run daily-intelligence`.
+workflow:
+  id: daily-intelligence
+  description: "Scan de conhecimento + síntese + proposta de conteúdo (mock determinístico)."
+  trigger:
+    kind: cron
+    cron: "0 8 * * 1-5"
+  steps:
+    - id: research
+      type: agent
+      agent: research.summary
+      input:
+        topic: "origem de crédito financeiro"
+    - id: knowledge
+      type: agent
+      agent: knowledge.search
+      input:
+        query: "origem de crédito"
+        limit: 5
+    - id: brief
+      type: agent
+      agent: content.draft
+      input:
+        topic: "$ref steps.research.topic"
+    - id: brand
+      type: agent
+      agent: brand.review
+      input:
+        title: "$ref steps.brief.title"
+    - id: social
+      type: agent
+      agent: social.draft
+      input:
+        title: "$ref steps.brief.title"
+    - id: editorial
+      type: approval
+      approval:
+        mode: record

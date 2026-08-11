@@ -1,0 +1,84 @@
+# GEOS Roadmap
+
+> **State: CURRENT** · Date: 2026-08-11 · Status: foundation in flight
+> Every phase ends with: tests green, docs updated, CHANGELOG entry, self-audit note.
+
+## Phase 0 — Foundation (bootstrap, in progress)
+
+| Item | SPEC | Status |
+|---|---|---|
+| Core runtime, config, IDs, telemetry | SPEC-001 | ✅ IMPLEMENTED + TESTED |
+| SQLite storage + migrations | SPEC-002 | ✅ IMPLEMENTED + TESTED |
+| Repository layer | SPEC-003 | ✅ IMPLEMENTED + TESTED |
+| Event bus | SPEC-004 | ✅ IMPLEMENTED + TESTED |
+| Job system | SPEC-005 | ✅ IMPLEMENTED + TESTED |
+| Scheduler (cron/interval) | SPEC-006 | ✅ IMPLEMENTED + TESTED |
+| Workflow engine (YAML DSL) | SPEC-007 | ✅ IMPLEMENTED + TESTED |
+| Project discovery + mode detection | SPEC-008 | ✅ IMPLEMENTED + TESTED |
+| Capability discovery + project manifest | SPEC-009 | ✅ IMPLEMENTED + TESTED |
+| Knowledge: documents, chunking, FTS | SPEC-010 | ✅ IMPLEMENTED + TESTED |
+| Open-source readiness (LICENSE, CONTRIBUTING, SECURITY, CHANGELOG, examples/) | — | PLANNED |
+
+## Mandated adoption specs (foundational; before advanced external automations)
+
+Required by the Installation, Bootstrap & Adoption Model (spec §73). Statuses:
+
+| SPEC | Title | Status |
+|---|---|---|
+| SPEC-101 | Project Discovery | ✅ IMPLEMENTED (core of SPEC-008) |
+| SPEC-102 | Mode Detection (greenfield/brownfield/standalone) | ✅ IMPLEMENTED (SPEC-008) |
+| SPEC-103 | Greenfield Bootstrap (`geos init --mode greenfield`, `geos bootstrap`) | PLANNED |
+| SPEC-104 | Brownfield Audit (`geos audit`, capability map) | ✅ PARTIAL (SPEC-009; full `geos audit` output planned) |
+| SPEC-105 | Capability Discovery (detector plugins) | ✅ PARTIAL (SPEC-009 core detectors; plugin API PLANNED) |
+| SPEC-106 | Integration Planner (`geos plan`) | PLANNED |
+| SPEC-107 | Repository Registry (`geos repo add/list/scan`) | PARTIAL (registry + zetra-one seed; CLI planned) |
+| SPEC-108 | Multi-Repo / Standalone Control Plane | PLANNED |
+| SPEC-109 | Shadow Mode | PLANNED (pattern specified in ADR-0005) |
+| SPEC-110 | Feature Flags | ✅ PARTIAL (config `features.*` honored by CLI; runtime gating PLANNED) |
+| SPEC-111 | Migration Safety (dual-run, cutover, rollback) | PLANNED |
+| SPEC-112 | Uninstall & Reversibility (`geos uninstall --keep-data`) | PLANNED |
+
+## Phase 1 — Knowledge + Research (first vertical slice)
+
+- SPEC-011 Embeddings (provider protocols + local/offline no-op) · SPEC-012 Hybrid RAG ·
+  SPEC-013 Knowledge Graph (nodes/edges in SQLite) · SPEC-014 Memory
+- Research engine (SPEC-021): QUESTION → PLAN → SOURCES → EXTRACTION → SYNTHESIS → INSIGHT →
+  KNOWLEDGE; deterministic mock provider first, real sources via connectors later.
+- Vertical slice 1: **Research → Knowledge → Content Brief → Blog Draft → Social Draft →
+  Approval → Schedule**, persisted in SQLite.
+
+## Phase 2 — Content + Growth engines
+
+- SPEC-022 Content Engine (content object, scoring, repurposing), SPEC-023 SEO Engine,
+  SPEC-024 Blog Publisher (markdown/CMS adapters), SPEC-025 Social Scheduler
+  (human-approval gated), SPEC-034 Campaign Engine, SPEC-035 Analytics (AnalyticsProvider +
+  metric registry + automated insights with OBSERVATION/HYPOTHESIS/INVESTIGATION framing).
+- Automations: `daily-growth-intelligence` (SPEC-143), `weekly-content`, `weekly-growth-review`,
+  changelog/release automation (SPEC-148) — all behind approvals and feature flags.
+
+## Phase 3 — Leads, CRM, Meetings
+
+- SPEC-026 Lead Intelligence, SPEC-027 Lead Scoring (FIT/INTENT/ENGAGEMENT/RELATIONSHIP,
+  explainable), SPEC-028 Lead Qualification (statuses + methodologies), SPEC-029 CRM (SQLite
+  internal fallback; HubSpot/Salesforce/Pipedrive adapters), SPEC-030 Next Best Action,
+  SPEC-031 Meeting Scheduling, SPEC-032 Google Calendar/Meet adapter (credential-gated),
+  SPEC-033 Email/Nurture (consent, caps, suppression — no cold-spam).
+
+## Phase 4 — Education, Community, DevRel
+
+- SPEC-036 Academy (tracks/courses/modules/lessons/labs/challenges/assessments/certifications),
+  SPEC-037 Community (Discord blueprint, question→education loop), DevRel, advanced social
+  (Instagram planner/writer/creative/analyst), campaign orchestration.
+
+## Phase 5 — Control Center + Intelligence
+
+- SPEC-038 Control Center (overview, signals, research, agents, runs, content, calendar, SEO,
+  growth, experiments, leads, pipeline, meetings, academy, community, assets, approvals,
+  knowledge, costs, health, settings), RAG debugger, agent-run debugger, backups, self-audit,
+  self-improvement loop (observation → proposal → SPEC → review → implementation).
+
+## Non-goals (this roadmap)
+
+- No cold-outreach/spam machinery ever (spec §139, §220).
+- No uncontrolled agent swarms; every collaboration has goal/budget/exit conditions.
+- No replacement of existing Zetra One systems without a SPEC and dual-run validation.

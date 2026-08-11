@@ -1,0 +1,36 @@
+# GEOS configuration de exemplo (SPEC-001).
+# Copie para .geos/geos.yaml ou use `geos init` para gerar.
+
+company:
+  name: Example
+
+storage:
+  provider: sqlite
+  mode: isolated
+  path: .geos/geos.db
+
+knowledge:
+  rag: true
+  graph: true
+
+agents:
+  research: true
+  content: true
+
+automations:
+  daily_intelligence: false
+
+approvals:
+  social_publish: required
+  blog_publish: required
+  newsletter_send: required
+  meeting_invite: required
+
+features:
+  rag: true
+  graph: false
+  social_publish:
+    enabled: false
+  meeting_scheduler:
+    enabled: false
+    shadow_mode: true

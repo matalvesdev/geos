@@ -1,0 +1,17 @@
+# Hello GEOS — workflow mínimo de 2 passos (SPEC-007).
+# Rode: geos workflows run hello --input message="oi geos"
+workflow:
+  id: hello
+  description: "Echo + gate de aprovação em modo registro."
+  trigger:
+    kind: manual
+  steps:
+    - id: say
+      type: agent
+      agent: echo
+      input:
+        message: "$ref inputs.message"
+    - id: gate
+      type: approval
+      approval:
+        mode: record

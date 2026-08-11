@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.pytest_cache/
+.coverage
+# GEOS runtime state — local-first, never committed
+.geos/
+*.db
+*.db-wal
+*.db-shm
+.env
