@@ -223,6 +223,33 @@ CREATE INDEX IF NOT EXISTS idx_insights_type ON insights(insight_type);
 """
 
 
+V5_SEO = """
+CREATE TABLE IF NOT EXISTS seo_audits (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  scope TEXT NOT NULL,
+  summary TEXT,
+  run_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_seo_audits_run ON seo_audits(run_at);
+
+CREATE TABLE IF NOT EXISTS seo_issues (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  audit_id TEXT REFERENCES seo_audits(id) ON DELETE CASCADE,
+  severity TEXT NOT NULL,
+  category TEXT NOT NULL,
+  target TEXT,
+  title TEXT NOT NULL,
+  detail TEXT,
+  recommendation TEXT,
+  run_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_seo_issues_severity ON seo_issues(severity);
+CREATE INDEX IF NOT EXISTS idx_seo_issues_audit ON seo_issues(audit_id);
+"""
+
+
 V4_MODEL_PROVENANCE = """
 -- Additive provenance for LLM-generated synthesis (SPEC-039): model, provider,
 -- and mock flag on research rows. Safe ALTERs (no rewrite of existing data).
@@ -285,6 +312,7 @@ MIGRATIONS: list[tuple[int, str, str]] = [
     (2, "knowledge_phase1", V2_KNOWLEDGE_PHASE1),
     (3, "content_phase2", V3_CONTENT_PHASE2),
     (4, "model_provenance", V4_MODEL_PROVENANCE),
+    (5, "seo_engine", V5_SEO),
 ]
 
 MAX_VERSION = max(v for v, _, _ in MIGRATIONS)

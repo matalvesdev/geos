@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11%20%7C%203.12%20%7C%203.13-3776AB?logo=python&logoColor=white)](https://github.com/matalvesdev/geos/blob/main/pyproject.toml)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/geos.svg?logo=pypi&logoColor=white)](https://pypi.org/project/geos/)
-[![Tests](https://img.shields.io/badge/tests-143%20passing-green)](https://github.com/matalvesdev/geos/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-154%20passing-green)](https://github.com/matalvesdev/geos/actions/workflows/ci.yml)
 
 **GEOS** é uma plataforma agentic que transforma sinais de mercado em inteligência
 organizacional e ação coordenada — de forma mensurável e com supervisão humana em todo
@@ -37,6 +37,9 @@ ANALYTICS → LEARNING → (melhor conhecimento, estratégia, produto, distribui
 - **ModelProvider** (spec §35): protocolo único para LLMs (OpenAI-compatible, local ou
   nuvem); síntese do research gerada por modelo **ancorada nas fontes com citações
   [F#]** quando `models:` está configurado — fallback mock honesto sem config.
+- **SEO Engine**: auditoria determinística (broken links, órfãos, thin content, gaps de
+  conteúdo, cannibalização, decay heurístico) com snapshot persistido por run — CLI
+  `geos seo audit`.
 - **Memory**: memória persistente com TTL/sensibilidade e scopes por domínio.
 - **Adoção não-destrutiva**: detecção GREENFIELD/BROWNFIELD/STANDALONE com evidências,
   capability discovery por repo, manifest e Repository Registry.
@@ -87,8 +90,8 @@ Sem `pip install`? `python -m geos.cli ...` funciona igual.
 ```
 geos/
 ├── geos/          # pacote Python (core, storage, intelligence, discovery, cli)
-├── tests/         # unittest (zero deps além de PyYAML) — 143 testes
-├── docs/geos/     # auditoria, contexto, visão, ADRs, roadmap, SPEC-001..022, 039
+├── tests/         # unittest (zero deps além de PyYAML) — 154 testes
+├── docs/geos/     # auditoria, contexto, visão, ADRs, roadmap, SPEC-001..023, 039
 ├── workflows/     # workflows declarativos de exemplo
 ├── examples/      # quickstart + config + docs de exemplo
 └── .github/       # CI (Linux + Windows, Python 3.11–3.13)
@@ -106,7 +109,7 @@ geos/
 ## Desenvolvimento
 
 ```bash
-python -m unittest discover -s tests -t .   # 143 testes, stdlib
+python -m unittest discover -s tests -t .   # 154 testes, stdlib
 python -m geos.cli doctor
 ```
 

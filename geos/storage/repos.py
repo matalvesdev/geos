@@ -753,6 +753,59 @@ class ResearchRepository:
         return [dict(r) for r in rows]
 
 
+# ---------------------------------------------------------------- SEO (SPEC-023)
+class SeoRepository:
+    """Persisted SEO audits + issues (history across runs, SPEC-023)."""
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def create_audit(self, scope: str, summary: dict[str, Any]) -> str:
+        audit_id = new_id()
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO seo_audits (id, workspace_id, scope, summary, run_at)"
+                " VALUES (?, 'default', ?, ?, ?)",
+                (audit_id, scope, json.dumps(summary, ensure_ascii=False), now_iso()),
+            )
+        return audit_id
+
+    def insert_issue(self, audit_id: str, severity: str, category: str,
+                     target: str | None, title: str, detail: str | None,
+                     recommendation: str | None) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO seo_issues (id, workspace_id, audit_id, severity, category,"
+                " target, title, detail, recommendation, run_at)"
+                " VALUES (?, 'default', ?, ?, ?, ?, ?, ?, ?, ?)",
+                (new_id(), audit_id, severity, category, target, title, detail,
+                 recommendation, now_iso()),
+            )
+
+    def list_issues(self, severity: str | None = None, limit: int = 200
+                    ) -> list[dict[str, Any]]:
+        q = "SELECT * FROM seo_issues"
+        params: list[Any] = []
+        if severity:
+            q += " WHERE severity = ?"
+            params.append(severity)
+        q += " ORDER BY run_at DESC, severity LIMIT ?"
+        params.append(limit)
+        rows = self._db.conn_checked.execute(q, params).fetchall()
+        return [dict(r) for r in rows]
+
+    def last_audit_summary(self) -> dict[str, Any] | None:
+        row = self._db.conn_checked.execute(
+            "SELECT summary FROM seo_audits ORDER BY run_at DESC LIMIT 1"
+        ).fetchone()
+        if row is None or not row["summary"]:
+            return None
+        try:
+            return json.loads(row["summary"])
+        except json.JSONDecodeError:
+            return None
+
+
 # ---------------------------------------------------------------- Content (SPEC-022)
 class ContentRepository:
     """Content objects + versioned snapshots (auditability, SPEC-022)."""
@@ -906,6 +959,7 @@ class RepoFactory:
         self.memories = MemoryRepository(db)
         self.research = ResearchRepository(db)
         self.content = ContentRepository(db)
+        self.seo = SeoRepository(db)
 
 
 def _fts_query(query: str) -> str:

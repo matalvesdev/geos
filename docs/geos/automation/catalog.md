@@ -24,6 +24,7 @@
 | A-014 | content-engine | Content | CLI/workflow | topic → idea pontuada → brief → draft versionado | ContentEngine (determinístico) | none (internal) | content, versions, score | ✅ IMPLEMENTED (v0.3.0) |
 | A-015 | content-repurpose | Content | CLI/workflow | draft → variantes por canal | ContentEngine.repurpose | none (internal, mock) | variants, sources | ✅ IMPLEMENTED (v0.3.0) |
 | A-016 | research-synthesis | Research | CLI/workflow | question+fontes → síntese com citações [F#] | ResearchEngine + ModelProvider (SPEC-039) | none (read-only) | research, model, mock | ✅ IMPLEMENTED (v0.4.0; mock default, LLM se `models:` configurado) |
+| A-017 | seo-audit | SEO | CLI `geos seo audit` | docs+content → issues persistidas | SeoEngine (determinístico, SPEC-023) | none (read-only) | audits, issues | ✅ IMPLEMENTED (v0.5.0) |
 
 ## Failure modes (all automations)
 

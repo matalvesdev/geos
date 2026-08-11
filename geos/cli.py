@@ -702,6 +702,48 @@ def cmd_content_show(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_seo_audit(args: argparse.Namespace) -> int:
+    from .domains.seo import SeoEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        scopes = tuple(args.scopes or ("docs", "content"))
+        result = SeoEngine(db).run_audit(scopes=scopes)
+        summary = result["summary"]
+        print(f"seo audit: {result['audit_id']} | scopes={', '.join(summary['scopes'])}")
+        print(f"  total={summary['total']} critical={summary.get('critical', 0)} "
+              f"warning={summary.get('warning', 0)} info={summary.get('info', 0)}")
+        for issue in result["issues"][: args.limit]:
+            target = f" ({issue['target']})" if issue["target"] else ""
+            print(f"  [{issue['severity']:8s}] {issue['category']}: {issue['title']}{target}")
+        if args.verbose:
+            for issue in result["issues"][: args.limit]:
+                if issue.get("recommendation"):
+                    print(f"      → {issue['recommendation']}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_seo_issues(args: argparse.Namespace) -> int:
+    from .domains.seo import SeoEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        issues = SeoEngine(db).list_issues(severity=args.severity)
+        print(f"{len(issues)} seo issue(s) registradas")
+        for issue in issues[: args.limit]:
+            target = f" ({issue['target']})" if issue["target"] else ""
+            print(f"  [{issue['severity']:8s}] {issue['category']}: {issue['title']}{target}")
+    finally:
+        db.close()
+    return 0
+
+
 def cmd_repo(args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
     registry = RepositoryRegistry(root / REGISTRY_PATH)
@@ -791,6 +833,19 @@ def main(argv: list[str] | None = None) -> int:
     p_inspect = p_graph_sub.add_parser("inspect", help="estatísticas e nós")
     p_inspect.add_argument("--type", default=None, help="filtrar por tipo de nó")
     p_inspect.set_defaults(func=cmd_graph_inspect)
+
+    p_seo = sub.add_parser("seo", help="SEO engine (SPEC-023)")
+    p_seo_sub = p_seo.add_subparsers(dest="seo_action", required=True)
+    p_audit = p_seo_sub.add_parser("audit", help="auditoria determinística (docs + content)")
+    p_audit.add_argument("--scope", action="append", dest="scopes", default=None,
+                         choices=["docs", "content"])
+    p_audit.add_argument("--limit", type=int, default=30)
+    p_audit.add_argument("--verbose", action="store_true", help="mostra recomendações")
+    p_audit.set_defaults(func=cmd_seo_audit)
+    p_issues = p_seo_sub.add_parser("issues", help="listar issues persistidas")
+    p_issues.add_argument("--severity", choices=["critical", "warning", "info"])
+    p_issues.add_argument("--limit", type=int, default=50)
+    p_issues.set_defaults(func=cmd_seo_issues)
 
     p_models = sub.add_parser("models", help="model providers (spec §35 / SPEC-039)")
     p_models_sub = p_models.add_subparsers(dest="models_action", required=True)

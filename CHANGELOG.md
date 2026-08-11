@@ -3,6 +3,28 @@
 Todas as mudanças relevantes do GEOS são registradas aqui (spec §198). Formato
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e versionamento semântico.
 
+## [0.5.0] — 2026-08-11 — SEO Engine (SPEC-023)
+
+### Added
+
+- **SEO Engine** (SPEC-023): auditoria determinística sobre o que o GEOS conhece
+  (sem crawl web, sem dados de tráfego — nunca fabrica sinais):
+  - **Docs**: broken links internos (`[text](path)` com resolução relativa `./`/`../`,
+    âncoras e externos ignorados), documentos órfãos, thin content (< 40 palavras),
+    metadados (sem título / primeira linha sem H1), falta de internal links.
+  - **Content**: gaps (nós TOPIC do graph sem objeto de conteúdo → sugestão
+    `geos content create`), cannibalização de tópicos, decay heurístico local
+    (idade + nunca atualizado + corpo curto → proposta de refresh, honesta).
+- **Migration V5** (`seo_engine`): tabelas `seo_audits` (snapshot por run) +
+  `seo_issues` (severidade/categoria/alvo/detalhe/recomendação) — histórico.
+- **CLI**: `geos seo audit [--scope docs|content] [--verbose]` e
+  `geos seo issues [--severity]`.
+- 9 novos testes (152 no total).
+
+### Changed
+
+- README atualizado (152 testes, features de SEO). Roadmap: SPEC-023 ✅ IMPLEMENTED.
+
 ## [0.4.0] — 2026-08-11 — Model Providers (SPEC-039)
 
 ### Added

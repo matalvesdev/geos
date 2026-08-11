@@ -61,7 +61,7 @@ provider falhar, cai para o mock (nunca fabrica conteúdo).
 | Item | SPEC | Status |
 |---|---|---|
 | Content Engine (content object, scoring determinístico, pipeline validado, repurposing) | SPEC-022 | ✅ IMPLEMENTED + TESTED (CLI `geos content`, handlers idempotentes) |
-| SEO Engine (pesquisa, técnico, conteúdo, internal linking, oportunidades, decay) | SPEC-023 | PLANNED |
+| SEO Engine (auditoria determinística: broken links, órfãos, thin, gaps, cannibalização, decay) | SPEC-023 | ✅ IMPLEMENTED + TESTED (CLI `seo audit/issues`) |
 | Blog Publisher (markdown/CMS adapters) | SPEC-024 | PLANNED |
 | Social Scheduler (human-approval gated) | SPEC-025 | PLANNED |
 | Campaign Engine | SPEC-034 | PLANNED |
