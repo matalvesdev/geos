@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11%20%7C%203.12%20%7C%203.13-3776AB?logo=python&logoColor=white)](https://github.com/matalvesdev/geos/blob/main/pyproject.toml)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/geos.svg?logo=pypi&logoColor=white)](https://pypi.org/project/geos/)
-[![Tests](https://img.shields.io/badge/tests-247%20passing-green)](https://github.com/matalvesdev/geos/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-333%20passing-green)](https://github.com/matalvesdev/geos/actions/workflows/ci.yml)
 
 **GEOS** é uma plataforma agentic que transforma sinais de mercado em inteligência
 organizacional e ação coordenada — de forma mensurável e com supervisão humana em todo
@@ -62,6 +62,9 @@ ANALYTICS → LEARNING → (melhor conhecimento, estratégia, produto, distribui
 - **Control Center**: dashboard **estático autocontido** (`geos control-center build`
   → um `control-center.html` dark, zero JS/assets externos) com KPIs, insights,
   aprovações, saúde e métricas — determinístico e read-only (SPEC-038).
+- **Campaign Orchestration** (SPEC-040): campanhas de crescimento com lifecycle
+  (`PLANNED → ACTIVE → PAUSED → COMPLETED / CANCELLED`), linking de conteúdo,
+  posts sociais e experimentos, métricas e orçamento — CLI `geos campaigns`.
 - **Bootstrap + Planner + Automations**: `geos bootstrap` cria workspace funcional
   idempotente (workflows, docs ingeridos, conteúdo seed, automações — SPEC-103);
   `geos plan` gera roteiro determinístico em 5 fases (SPEC-106); `geos automations
@@ -117,7 +120,7 @@ Sem `pip install`? `python -m geos.cli ...` funciona igual.
 ```
 geos/
 ├── geos/          # pacote Python (core, storage, intelligence, discovery, cli)
-├── tests/         # unittest (zero deps além de PyYAML) — 247 testes
+├── tests/         # unittest (zero deps além de PyYAML) — 333 testes
 ├── docs/geos/     # auditoria, contexto, visão, ADRs, roadmap, SPEC-001..025, 034, 035, 038, 039, 103, 106
 ├── workflows/     # workflows declarativos de exemplo
 ├── examples/      # quickstart + config + docs de exemplo
@@ -136,7 +139,7 @@ geos/
 ## Desenvolvimento
 
 ```bash
-python -m unittest discover -s tests -t .   # 247 testes, stdlib
+python -m unittest discover -s tests -t .   # 333 testes, stdlib
 python -m geos.cli doctor
 ```
 

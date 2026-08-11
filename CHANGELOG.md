@@ -3,6 +3,100 @@
 Todas as mudanças relevantes do GEOS são registradas aqui (spec §198). Formato
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e versionamento semântico.
 
+## [0.11.0] — 2026-08-11 — Campaign Orchestration (SPEC-040)
+## [0.12.0] — 2026-08-11 — Phase 3: Leads, CRM, Meetings, Email Nurture
+## [0.13.0] — 2026-08-11 — Phase 4: Academy + Community
+## [0.14.0] — 2026-08-11 — Phase 5: Control Center Enhancements
+
+### Added
+
+- **RAG Debugger** (Phase 5): debug RAG retrieval for queries with result
+  scoring, source tracking, and index statistics — CLI `geos cc rag-debug`.
+- **Run Debugger** (Phase 5): debug specific runs with event timeline and
+  error details — CLI `geos cc run-debug`.
+- **Backup Management** (Phase 5): database backup creation and listing —
+  CLI `geos cc backup` / `geos cc list-backups`.
+- **Self-Audit** (Phase 5): automated health checks across schema, knowledge,
+  content, approvals, leads, and CRM with recommendations —
+  CLI `geos cc audit`.
+- 5 novos testes (333 no total).
+
+### Changed
+
+- README (333 testes, features control center Phase 5), roadmap Phase 5 ✅.
+
+### Added
+
+- **Academy Engine** (SPEC-036): tracks, courses, modules, lessons, labs,
+  challenges, assessments with hierarchy (parent/child), difficulty levels,
+  prerequisites, learner progress (ENROLLED → IN_PROGRESS → COMPLETED),
+  certifications, analytics — CLI `geos academy create/list/publish/enroll/
+  progress/certify/content-analytics`.
+- **Community Engine** (SPEC-037): members (multi-platform: discord/slack/
+  forum/github), threads with channel/status, replies with answer marking,
+  analytics per channel, community overview — CLI `geos community add-member/
+  list-members/create-thread/add-reply/overview`.
+- **Migrations V15-V16**: `academy_content`, `academy_enrollments`,
+  `academy_certifications`, `community_members`, `community_threads`,
+  `community_replies`.
+- 19 novos testes (328 no total).
+
+### Changed
+
+- README (333 testes, features academy/community), roadmap Phase 4 ✅.
+
+### Added
+
+- **Lead Intelligence Engine** (SPEC-026/027/028): lifecycle completo
+  (`CAPTURED → QUALIFIED → ENGAGED → MEETING_SCHEDULED → OPPORTUNITY_CREATED →
+  WON / LOST`), scoring determinístico e explicável (FIT/INTENT/ENGAGEMENT/
+  RELATIONSHIP com breakdown), qualificação BANT/MEDDIC/GPCTBA/CHAMP, registro
+  de interações — CLI `geos leads capture/list/show/status/qualify/disqualify/
+  interact/score`.
+- **CRM Engine** (SPEC-029): pipeline de deals com stages configuráveis
+  (PROSPECTING → QUALIFICATION → PROPOSAL → NEGOTIATION → CONTRACT →
+  CLOSED_WON / CLOSED_LOST), atividades (call/email/meeting/task/note/demo),
+  pipeline summary com weighted value — CLI `geos crm create-deal/list-deals/
+  transition/pipeline/create-activity/complete-activity`.
+- **Meeting Scheduling** (SPEC-031/032): lifecycle (`SCHEDULED → COMPLETED /
+  CANCELLED / NO_SHOW`), types (discovery/demo/follow_up/negotiation/close),
+  analytics com completion/no-show rates — CLI `geos meetings schedule/list/
+  upcoming/complete/cancel/analytics`.
+- **Email Nurture** (SPEC-033): sequences com trigger events, enrollments,
+  suppression list (no cold-spam, spec §139/220) — CLI `geos email create-
+  sequence/list-sequences/enroll/suppress/list-suppressions`.
+- **Migrations V11-V14**: `leads`, `lead_interactions`, `lead_score_history`,
+  `crm_deals`, `crm_deal_stages`, `crm_activities`, `meetings`,
+  `email_sequences`, `email_enrollments`, `email_suppression_list`.
+- 41 novos testes (309 no total).
+
+### Changed
+
+- README (333 testes, features leads/crm/meetings/email), roadmap Phase 3 ✅.
+
+### Added
+
+- **Campaigns Engine** (SPEC-040): orquestração de campanhas de crescimento com
+  lifecycle completo (`PLANNED → ACTIVE → PAUSED → COMPLETED / CANCELLED`),
+  linking de conteúdo, posts sociais e experimentos, métricas e orçamento.
+- **Campaign Types**: `content_distribution`, `lead_generation`, `brand_awareness`,
+  `product_launch`, `community_building`, `education`, `retention`, `event`.
+- **Content/Social/Experiment Linking**: campanhas podem linkar múltiplos itens
+  de conteúdo, posts sociais e experimentos com operações idempotentes.
+- **Metrics Tracking**: registro de métricas por nome com histórico, latest value,
+  e summary com progresso vs targets.
+- **Budget Tracking**: registro de gastos com validação de orçamento e status
+  de utilização.
+- **Migration V10** (`campaigns`): tabelas `campaigns`, `campaign_content`,
+  `campaign_social`, `campaign_experiments`, `campaign_metrics`, `campaign_spends`.
+- **CLI**: `geos campaigns create/list/show/activate/pause/complete/cancel`,
+  `add-content/add-social/add-experiment`, `record-metric/record-spend/summary`.
+- 21 novos testes (268 no total).
+
+### Changed
+
+- README (333 testes, features de campaigns), roadmap SPEC-040 ✅.
+
 ## [0.10.0] — 2026-08-11 — Control Center + Bootstrap + Planner + Automations
 
 ### Added

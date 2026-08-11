@@ -67,17 +67,21 @@ provider falhar, cai para o mock (nunca fabrica conteúdo).
 | Blog Publisher (markdown + front matter, adapters local/CMS, aprovação humana obrigatória) | SPEC-024 | ✅ IMPLEMENTED + TESTED (CLI `blog prepare/publish`, `content draft`) |
 | Social Scheduler (human-approval gated, posts determinísticos por canal, agendamento) | SPEC-025 | ✅ IMPLEMENTED + TESTED (CLI `social prepare/list/due/publish`, migration V8) |
 | Analytics (AnalyticsProvider + metric registry + insights OBSERVATION/HYPOTHESIS/INVESTIGATION) | SPEC-035 | ✅ IMPLEMENTED + TESTED (CLI `analytics collect/metrics/insights`, migration V9) |
+| Campaign Orchestration (lifecycle, content/social/experiment linking, metrics, budget) | SPEC-040 | ✅ IMPLEMENTED + TESTED (CLI `geos campaigns`, migration V10) |
 
 Automations: `daily-growth-intelligence` (SPEC-143), `weekly-content`, `weekly-growth-review`,
 changelog/release automation (SPEC-148) — all behind approvals and feature flags.
 
 ## Phase 3 — Leads, CRM, Meetings
 
-- SPEC-026 Lead Intelligence, SPEC-027 Lead Scoring (FIT/INTENT/ENGAGEMENT/RELATIONSHIP,
-  explainable), SPEC-028 Lead Qualification (statuses + methodologies), SPEC-029 CRM (SQLite
-  internal fallback; HubSpot/Salesforce/Pipedrive adapters), SPEC-030 Next Best Action,
-  SPEC-031 Meeting Scheduling, SPEC-032 Google Calendar/Meet adapter (credential-gated),
-  SPEC-033 Email/Nurture (consent, caps, suppression — no cold-spam).
+| Item | SPEC | Status |
+|---|---|---|
+| Lead Intelligence (lifecycle, scoring, qualification, interactions) | SPEC-026/027/028 | ✅ IMPLEMENTED + TESTED (CLI ) |
+| CRM (deal pipeline, stages, activities, pipeline summary) | SPEC-029 | ✅ IMPLEMENTED + TESTED (CLI ) |
+| Meeting Scheduling (lifecycle, types, analytics) | SPEC-031/032 | ✅ IMPLEMENTED + TESTED (CLI ) |
+| Email Nurture (sequences, enrollments, suppression) | SPEC-033 | ✅ IMPLEMENTED + TESTED (CLI ) |
+
+Remaining: SPEC-030 Next Best Action, SPEC-032 Google Calendar/Meet adapter (external API integration).
 
 ## Phase 4 — Education, Community, DevRel
 

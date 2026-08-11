@@ -1205,6 +1205,232 @@ def cmd_social_publish(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_campaigns_create(args: argparse.Namespace) -> int:
+    from .domains.campaigns import CampaignEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        engine = CampaignEngine(db)
+        item = engine.create(
+            name=args.name,
+            campaign_type=args.type,
+            hypothesis=args.hypothesis,
+            objective=args.objective,
+            audience=args.audience,
+            budget=args.budget,
+            start_date=args.start_date,
+            end_date=args.end_date,
+            tags=args.tags,
+        )
+        print(f"created {item['id']} | {item['status']} | {item['campaign_type']}")
+        print(f"  name: {item['name']} ({item['slug']})")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_campaigns_list(args: argparse.Namespace) -> int:
+    from .domains.campaigns import CampaignEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        items = CampaignEngine(db).list(
+            status=args.status, campaign_type=args.type, limit=args.limit
+        )
+        print(f"{len(items)} campaign(s)")
+        for item in items:
+            budget = f"budget={item['budget']:.0f}" if item.get("budget") else "budget=-"
+            print(f"  {item['status']:10s} {item['campaign_type']:22s} {budget:14s} "
+                  f"{item['name']} ({item['slug']})")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_campaigns_show(args: argparse.Namespace) -> int:
+    from .domains.campaigns import CampaignEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        item = CampaignEngine(db).get(args.campaign_id)
+        print(f"{item['name']} ({item['slug']})")
+        print(f"type={item['campaign_type']} status={item['status']}")
+        if item.get("hypothesis"):
+            print(f"hypothesis: {item['hypothesis']}")
+        if item.get("objective"):
+            print(f"objective: {item['objective']}")
+        if item.get("audience"):
+            print(f"audience: {item['audience']}")
+        if item.get("budget"):
+            print(f"budget: {item['budget']} (spent: {item.get('total_spend', 0)})")
+        if item.get("start_date"):
+            print(f"period: {item['start_date']} → {item.get('end_date', '?')}")
+        tags = item.get("tags") or []
+        if tags:
+            print(f"tags: {', '.join(tags)}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_campaigns_activate(args: argparse.Namespace) -> int:
+    from .domains.campaigns import CampaignEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        item = CampaignEngine(db).activate(args.campaign_id)
+        print(f"{item['id']}: {item['status']}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_campaigns_pause(args: argparse.Namespace) -> int:
+    from .domains.campaigns import CampaignEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        item = CampaignEngine(db).pause(args.campaign_id)
+        print(f"{item['id']}: {item['status']}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_campaigns_complete(args: argparse.Namespace) -> int:
+    from .domains.campaigns import CampaignEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        item = CampaignEngine(db).complete(args.campaign_id, result=args.result)
+        print(f"{item['id']}: {item['status']}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_campaigns_cancel(args: argparse.Namespace) -> int:
+    from .domains.campaigns import CampaignEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        item = CampaignEngine(db).cancel(args.campaign_id, reason=args.reason)
+        print(f"{item['id']}: {item['status']}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_campaigns_add_content(args: argparse.Namespace) -> int:
+    from .domains.campaigns import CampaignEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        item = CampaignEngine(db).add_content(args.campaign_id, args.content_id)
+        print(f"added content {args.content_id} to campaign {item['id']}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_campaigns_add_social(args: argparse.Namespace) -> int:
+    from .domains.campaigns import CampaignEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        item = CampaignEngine(db).add_social_post(args.campaign_id, args.post_id)
+        print(f"added social post {args.post_id} to campaign {item['id']}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_campaigns_add_experiment(args: argparse.Namespace) -> int:
+    from .domains.campaigns import CampaignEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        item = CampaignEngine(db).add_experiment(args.campaign_id, args.experiment_id)
+        print(f"added experiment {args.experiment_id} to campaign {item['id']}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_campaigns_record_metric(args: argparse.Namespace) -> int:
+    from .domains.campaigns import CampaignEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        CampaignEngine(db).record_metric(
+            args.campaign_id, args.metric_name, args.value, source=args.source
+        )
+        print(f"recorded {args.metric_name}={args.value} for campaign {args.campaign_id}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_campaigns_record_spend(args: argparse.Namespace) -> int:
+    from .domains.campaigns import CampaignEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        CampaignEngine(db).record_spend(
+            args.campaign_id, args.amount, description=args.description
+        )
+        print(f"recorded spend={args.amount} for campaign {args.campaign_id}")
+    finally:
+        db.close()
+    return 0
+
+
+def cmd_campaigns_summary(args: argparse.Namespace) -> int:
+    from .domains.campaigns import CampaignEngine
+
+    settings = _settings(args.root, args.config)
+    db = _db(settings)
+    db.migrate()
+    try:
+        result = CampaignEngine(db).summary(args.campaign_id)
+        campaign = result["campaign"]
+        print(f"Campaign: {campaign['name']} ({campaign['slug']})")
+        print(f"Status: {campaign['status']} | Type: {campaign['campaign_type']}")
+        print(f"Content: {result['content_count']} | Social: {result['social_posts_count']} "
+              f"| Experiments: {result['experiments_count']}")
+        budget = result["budget"]
+        if budget["budget"]:
+            print(f"Budget: {budget['budget']:.0f} | Spent: {budget['total_spend']:.0f} "
+                  f"| Remaining: {budget['remaining']:.0f} ({budget['utilization']:.1f}%)")
+    finally:
+        db.close()
+    return 0
+
+
 def cmd_repo(args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
     registry = RepositoryRegistry(root / REGISTRY_PATH)
@@ -1510,6 +1736,78 @@ def main(argv: list[str] | None = None) -> int:
     p_auto_sub.add_parser("run", help="enfileirar vencidas e processar (worker)").set_defaults(
         func=cmd_automations_run
     )
+
+    p_campaigns = sub.add_parser("campaigns", help="campaign orchestration (SPEC-040)")
+    p_camp_sub = p_campaigns.add_subparsers(dest="campaigns_action", required=True)
+    p_ccreate = p_camp_sub.add_parser("create", help="criar campanha")
+    p_ccreate.add_argument("name")
+    p_ccreate.add_argument("--type", default="content_distribution",
+                           choices=["content_distribution", "lead_generation",
+                                    "brand_awareness", "product_launch",
+                                    "community_building", "education",
+                                    "retention", "event"])
+    p_ccreate.add_argument("--hypothesis", default=None)
+    p_ccreate.add_argument("--objective", default=None)
+    p_ccreate.add_argument("--audience", default=None)
+    p_ccreate.add_argument("--budget", type=float, default=None)
+    p_ccreate.add_argument("--start-date", default=None)
+    p_ccreate.add_argument("--end-date", default=None)
+    p_ccreate.add_argument("--tag", action="append", dest="tags", default=None)
+    p_ccreate.set_defaults(func=cmd_campaigns_create)
+    p_cclist = p_camp_sub.add_parser("list", help="listar campanhas")
+    p_cclist.add_argument("--status", default=None)
+    p_cclist.add_argument("--type", default=None)
+    p_cclist.add_argument("--limit", type=int, default=50)
+    p_cclist.set_defaults(func=cmd_campaigns_list)
+    p_ccshow = p_camp_sub.add_parser("show", help="mostrar detalhes da campanha")
+    p_ccshow.add_argument("campaign_id")
+    p_ccshow.set_defaults(func=cmd_campaigns_show)
+    p_ccactivate = p_camp_sub.add_parser("activate", help="ativar campanha PLANNED")
+    p_ccactivate.add_argument("campaign_id")
+    p_ccactivate.set_defaults(func=cmd_campaigns_activate)
+    p_ccpause = p_camp_sub.add_parser("pause", help="pausar campanha ACTIVE")
+    p_ccpause.add_argument("campaign_id")
+    p_ccpause.set_defaults(func=cmd_campaigns_pause)
+    p_cccomplete = p_camp_sub.add_parser("complete", help="concluir campanha")
+    p_cccomplete.add_argument("campaign_id")
+    p_cccomplete.add_argument("--result", default=None)
+    p_cccomplete.set_defaults(func=cmd_campaigns_complete)
+    p_cccancel = p_camp_sub.add_parser("cancel", help="cancelar campanha")
+    p_cccancel.add_argument("campaign_id")
+    p_cccancel.add_argument("--reason", default=None)
+    p_cccancel.set_defaults(func=cmd_campaigns_cancel)
+    p_ccaddcontent = p_camp_sub.add_parser("add-content", help="adicionar conteúdo à campanha")
+    p_ccaddcontent.add_argument("campaign_id")
+    p_ccaddcontent.add_argument("content_id")
+    p_ccaddcontent.set_defaults(func=cmd_campaigns_add_content)
+    p_ccaddsocial = p_camp_sub.add_parser("add-social", help="adicionar post social à campanha")
+    p_ccaddsocial.add_argument("campaign_id")
+    p_ccaddsocial.add_argument("post_id")
+    p_ccaddsocial.set_defaults(func=cmd_campaigns_add_social)
+    p_ccaddexp = p_camp_sub.add_parser("add-experiment", help="adicionar experimento à campanha")
+    p_ccaddexp.add_argument("campaign_id")
+    p_ccaddexp.add_argument("experiment_id")
+    p_ccaddexp.set_defaults(func=cmd_campaigns_add_experiment)
+    p_ccmetric = p_camp_sub.add_parser("record-metric", help="registrar métrica da campanha")
+    p_ccmetric.add_argument("campaign_id")
+    p_ccmetric.add_argument("metric_name")
+    p_ccmetric.add_argument("value", type=float)
+    p_ccmetric.add_argument("--source", default=None)
+    p_ccmetric.set_defaults(func=cmd_campaigns_record_metric)
+    p_ccspend = p_camp_sub.add_parser("record-spend", help="registrar gasto da campanha")
+    p_ccspend.add_argument("campaign_id")
+    p_ccspend.add_argument("amount", type=float)
+    p_ccspend.add_argument("--description", default=None)
+    p_ccspend.set_defaults(func=cmd_campaigns_record_spend)
+    p_ccsummary = p_camp_sub.add_parser("summary", help="resumo completo da campanha")
+    p_ccsummary.add_argument("campaign_id")
+    p_ccsummary.set_defaults(func=cmd_campaigns_summary)
+    # Phase 3: Leads, CRM, Meetings, Email
+    from .cli_phase3 import register_phase3_parsers, register_phase4_parsers, register_phase5_parsers
+    register_phase3_parsers(sub)
+    register_phase4_parsers(sub)
+    register_phase5_parsers(sub)
+
 
     p_repo = sub.add_parser("repo", help="repository registry")
     p_repo_sub = p_repo.add_subparsers(dest="repo_action", required=True)

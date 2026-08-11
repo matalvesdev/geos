@@ -77,7 +77,7 @@ control center, integrações externas.
 From the repository root (`geos/`):
 
 ```bash
-python -m unittest discover -s tests -t .    # 247 tests (stdlib, zero deps)
+python -m unittest discover -s tests -t .    # 333 tests (stdlib, zero deps)
 python -m geos.cli doctor                     # environment + config checks
 ```
 

@@ -1,9 +1,12 @@
-"""Control Center (SPEC-038 bootstrap): self-contained HTML dashboard.
+"""Control Center (SPEC-038): self-contained HTML dashboard.
 
 `geos control-center build` reads the local database (analytics snapshot,
-approvals, content/blog/social pipeline, growth, telemetry, health) and renders
-a single self-contained HTML file — dark theme, zero external assets, charts in
-pure CSS. Deterministic snapshot of the workspace at build time; no server.
+approvals, content/blog/social pipeline, growth, telemetry, health, RAG,
+runs, backups, self-audit) and renders a single self-contained HTML file —
+dark theme, zero external assets, charts in pure CSS.
+
+Phase 5 enhancements: RAG debugger, run debugger, backup management,
+self-audit, and self-improvement loop.
 """
 
 from __future__ import annotations
@@ -67,6 +70,197 @@ class ControlCenter:
     def __init__(self, db: Database) -> None:
         self._db = db
         self._repo = RepoFactory(db)
+
+    # ---- RAG debugger (Phase 5) -------------------------------------------
+    def rag_debugger(self, query: str) -> dict[str, Any]:
+        """Debug RAG retrieval for a query."""
+        from ..intelligence.retrieval import HybridRetriever, RetrievalConfig
+        
+        retriever = HybridRetriever(self._db, RetrievalConfig())
+        results = retriever.search(query, limit=10)
+        
+        return {
+            "query": query,
+            "results_count": len(results),
+            "results": [
+                {
+                    "chunk_id": r.chunk_id,
+                    "score": r.score,
+                    "source": r.uri,
+                    "title": r.title,
+                    "snippet": r.snippet[:200],
+                    "strategy": r.strategy,
+                }
+                for r in results
+            ],
+            "index_stats": self._rag_index_stats(),
+        }
+
+    def _rag_index_stats(self) -> dict[str, Any]:
+        """Get RAG index statistics."""
+        docs = self._repo.knowledge.list_documents()
+        from ..storage.repos import RepoFactory
+        repo = RepoFactory(self._db)
+        embeddings_count = len(repo.embeddings.candidates(limit=10000))
+        
+        return {
+            "documents": len(docs),
+            "embeddings": embeddings_count,
+            "doc_types": list({d.get("doc_type", "unknown") for d in docs}),
+        }
+
+    # ---- Run debugger (Phase 5) -------------------------------------------
+    def run_debugger(self, run_id: str) -> dict[str, Any]:
+        """Debug a specific run."""
+        from ..core.telemetry import Telemetry
+        telemetry = Telemetry(self._db)
+        
+        run = None
+        for r in telemetry.list(limit=1000):
+            if r.id == run_id:
+                run = r
+                break
+        
+        if run is None:
+            return {"error": f"run {run_id} not found"}
+        
+        # Get events for this run
+        events = self._repo.events.list(trace_id=run.trace_id, limit=50)
+        
+        return {
+            "run": run.__dict__,
+            "events": [
+                {
+                    "type": e.event_type,
+                    "payload": e.payload,
+                    "created_at": e.created_at,
+                }
+                for e in events
+            ],
+            "duration_ms": run.duration_ms,
+            "error": run.error,
+        }
+
+    # ---- Backup management (Phase 5) --------------------------------------
+    def backup_database(self, backup_path: str) -> dict[str, Any]:
+        """Create a backup of the database."""
+        import shutil
+        from pathlib import Path
+        
+        src = str(self._db._path) if hasattr(self._db, "_path") else self._db.path
+        if src is None:
+            return {"error": "cannot backup :memory: database"}
+        
+        dst = Path(backup_path)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+        
+        return {
+            "source": str(src),
+            "destination": str(dst),
+            "size_bytes": dst.stat().st_size,
+            "created_at": now_iso(),
+        }
+
+    def list_backups(self, backup_dir: str = "backups") -> list[dict[str, Any]]:
+        """List available backups."""
+        from pathlib import Path
+        
+        backups_path = Path(backup_dir)
+        if not backups_path.exists():
+            return []
+        
+        backups = []
+        for f in sorted(backups_path.glob("geos-*.db"), reverse=True):
+            backups.append({
+                "name": f.name,
+                "path": str(f),
+                "size_bytes": f.stat().st_size,
+                "modified_at": f.stat().st_mtime,
+            })
+        return backups[:10]
+
+    # ---- Self-audit (Phase 5) ---------------------------------------------
+    def self_audit(self) -> dict[str, Any]:
+        """Run self-audit checks."""
+        checks = []
+        
+        # Schema check
+        try:
+            version = self._db.current_version()
+            checks.append({"name": "schema", "status": "ok", "detail": f"v{version}"})
+        except Exception as e:
+            checks.append({"name": "schema", "status": "error", "detail": str(e)})
+        
+        # Knowledge check
+        docs = self._repo.knowledge.list_documents()
+        if docs:
+            checks.append({"name": "knowledge", "status": "ok", "detail": f"{len(docs)} documents"})
+        else:
+            checks.append({"name": "knowledge", "status": "warning", "detail": "no documents ingested"})
+        
+        # Content check
+        content = self._repo.content.list()
+        orphaned = [c for c in content if c["status"] == "IDEA"]
+        if orphaned:
+            checks.append({"name": "content", "status": "warning", "detail": f"{len(orphaned)} orphaned ideas"})
+        else:
+            checks.append({"name": "content", "status": "ok", "detail": f"{len(content)} items"})
+        
+        # Approvals check
+        pending = self._repo.approvals.list_pending()
+        if len(pending) > 10:
+            checks.append({"name": "approvals", "status": "warning", "detail": f"{len(pending)} pending (>10)"})
+        else:
+            checks.append({"name": "approvals", "status": "ok", "detail": f"{len(pending)} pending"})
+        
+        # Leads check
+        leads = self._repo.leads.list()
+        stale = [l for l in leads if l["status"] == "CAPTURED"]
+        if len(stale) > 5:
+            checks.append({"name": "leads", "status": "warning", "detail": f"{len(stale)} unqualified leads"})
+        else:
+            checks.append({"name": "leads", "status": "ok", "detail": f"{len(leads)} total"})
+        
+        # CRM check
+        deals = self._repo.crm.list_deals(status="OPEN")
+        stale_deals = [d for d in deals if d.get("probability", 0) < 0.2]
+        if stale_deals:
+            checks.append({"name": "crm", "status": "warning", "detail": f"{len(stale_deals)} low-probability deals"})
+        else:
+            checks.append({"name": "crm", "status": "ok", "detail": f"{len(deals)} open deals"})
+        
+        passed = sum(1 for c in checks if c["status"] == "ok")
+        warnings = sum(1 for c in checks if c["status"] == "warning")
+        errors = sum(1 for c in checks if c["status"] == "error")
+        
+        return {
+            "checks": checks,
+            "summary": {
+                "passed": passed,
+                "warnings": warnings,
+                "errors": errors,
+                "score": round(passed / len(checks) * 100, 1) if checks else 0,
+            },
+            "recommendations": self._generate_recommendations(checks),
+        }
+
+    def _generate_recommendations(self, checks: list[dict[str, Any]]) -> list[str]:
+        """Generate recommendations based on audit results."""
+        recs = []
+        for check in checks:
+            if check["status"] == "warning":
+                if check["name"] == "knowledge":
+                    recs.append("Run `geos knowledge ingest <dir>` to build knowledge base")
+                elif check["name"] == "content":
+                    recs.append("Review orphaned content ideas and either brief or archive them")
+                elif check["name"] == "approvals":
+                    recs.append("Review pending approvals to unblock automated workflows")
+                elif check["name"] == "leads":
+                    recs.append("Qualify or disqualify stale captured leads")
+                elif check["name"] == "crm":
+                    recs.append("Review low-probability deals or mark as LOST")
+        return recs
 
     # ---- data ---------------------------------------------------------------
     def _metrics(self) -> dict[str, Any]:

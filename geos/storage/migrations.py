@@ -437,6 +437,340 @@ CREATE INDEX IF NOT EXISTS idx_blog_content ON blog_posts(content_id);
 """
 
 
+V10_CAMPAIGNS = """
+CREATE TABLE IF NOT EXISTS campaigns (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  campaign_type TEXT NOT NULL,
+  hypothesis TEXT,
+  objective TEXT,
+  audience TEXT,
+  budget REAL,
+  total_spend REAL NOT NULL DEFAULT 0,
+  start_date TEXT,
+  end_date TEXT,
+  target_metrics TEXT NOT NULL DEFAULT '{}',
+  tags TEXT NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL DEFAULT 'PLANNED',
+  result TEXT,
+  cancel_reason TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_campaigns_slug ON campaigns(slug);
+CREATE INDEX IF NOT EXISTS idx_campaigns_status ON campaigns(status);
+CREATE INDEX IF NOT EXISTS idx_campaigns_type ON campaigns(campaign_type);
+
+CREATE TABLE IF NOT EXISTS campaign_content (
+  campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  content_id TEXT NOT NULL REFERENCES content(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (campaign_id, content_id)
+);
+
+CREATE TABLE IF NOT EXISTS campaign_social (
+  campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  post_id TEXT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (campaign_id, post_id)
+);
+
+CREATE TABLE IF NOT EXISTS campaign_experiments (
+  campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  experiment_id TEXT NOT NULL REFERENCES experiments(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (campaign_id, experiment_id)
+);
+
+CREATE TABLE IF NOT EXISTS campaign_metrics (
+  id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  metric_name TEXT NOT NULL,
+  value REAL NOT NULL,
+  source TEXT,
+  recorded_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_campaign_metrics_name ON campaign_metrics(campaign_id, metric_name);
+
+CREATE TABLE IF NOT EXISTS campaign_spends (
+  id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  amount REAL NOT NULL,
+  description TEXT,
+  recorded_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_campaign_spends_campaign ON campaign_spends(campaign_id);
+"""
+
+
+V11_LEADS = """
+CREATE TABLE IF NOT EXISTS leads (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  email TEXT NOT NULL,
+  name TEXT,
+  company TEXT,
+  title TEXT,
+  phone TEXT,
+  website TEXT,
+  linkedin_url TEXT,
+  source TEXT NOT NULL DEFAULT 'manual',
+  tags TEXT NOT NULL DEFAULT '[]',
+  metadata TEXT NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'CAPTURED',
+  owner_id TEXT,
+  score REAL,
+  score_breakdown TEXT,
+  interaction_count INTEGER NOT NULL DEFAULT 0,
+  qualification_method TEXT,
+  qualification_criteria TEXT,
+  qualified_at TEXT,
+  disqualification_reason TEXT,
+  disqualification_notes TEXT,
+  disqualified_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_email ON leads(email);
+CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
+CREATE INDEX IF NOT EXISTS idx_leads_source ON leads(source);
+CREATE INDEX IF NOT EXISTS idx_leads_company ON leads(company);
+
+CREATE TABLE IF NOT EXISTS lead_interactions (
+  id TEXT PRIMARY KEY,
+  lead_id TEXT NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+  interaction_type TEXT NOT NULL,
+  summary TEXT,
+  metadata TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_lead_interactions_lead ON lead_interactions(lead_id);
+
+CREATE TABLE IF NOT EXISTS lead_score_history (
+  id TEXT PRIMARY KEY,
+  lead_id TEXT NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+  score REAL NOT NULL,
+  breakdown TEXT NOT NULL,
+  computed_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_lead_score_history_lead ON lead_score_history(lead_id);
+"""
+
+V12_CRM = """
+CREATE TABLE IF NOT EXISTS crm_deals (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  lead_id TEXT REFERENCES leads(id),
+  name TEXT NOT NULL,
+  value REAL,
+  currency TEXT NOT NULL DEFAULT 'BRL',
+  stage TEXT NOT NULL DEFAULT 'PROSPECTING',
+  probability REAL DEFAULT 0,
+  expected_close_date TEXT,
+  actual_close_date TEXT,
+  owner_id TEXT,
+  tags TEXT NOT NULL DEFAULT '[]',
+  metadata TEXT NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'OPEN',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_crm_deals_status ON crm_deals(status);
+CREATE INDEX IF NOT EXISTS idx_crm_deals_stage ON crm_deals(stage);
+CREATE INDEX IF NOT EXISTS idx_crm_deals_lead ON crm_deals(lead_id);
+
+CREATE TABLE IF NOT EXISTS crm_deal_stages (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  name TEXT NOT NULL,
+  "order" INTEGER NOT NULL,
+  probability REAL DEFAULT 0,
+  is_won BOOLEAN DEFAULT 0,
+  is_lost BOOLEAN DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS crm_activities (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  deal_id TEXT REFERENCES crm_deals(id) ON DELETE CASCADE,
+  lead_id TEXT REFERENCES leads(id) ON DELETE CASCADE,
+  activity_type TEXT NOT NULL,
+  subject TEXT,
+  description TEXT,
+  due_date TEXT,
+  completed BOOLEAN DEFAULT 0,
+  owner_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_crm_activities_deal ON crm_activities(deal_id);
+CREATE INDEX IF NOT EXISTS idx_crm_activities_lead ON crm_activities(lead_id);
+"""
+
+V13_MEETINGS = """
+CREATE TABLE IF NOT EXISTS meetings (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  lead_id TEXT REFERENCES leads(id),
+  deal_id TEXT REFERENCES crm_deals(id),
+  title TEXT NOT NULL,
+  description TEXT,
+  meeting_type TEXT NOT NULL DEFAULT 'discovery',
+  scheduled_at TEXT NOT NULL,
+  duration_minutes INTEGER DEFAULT 30,
+  timezone TEXT DEFAULT 'UTC',
+  location TEXT,
+  meeting_url TEXT,
+  external_id TEXT,
+  status TEXT NOT NULL DEFAULT 'SCHEDULED',
+  notes TEXT,
+  outcome TEXT,
+  owner_id TEXT,
+  attendees TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_meetings_status ON meetings(status);
+CREATE INDEX IF NOT EXISTS idx_meetings_scheduled ON meetings(scheduled_at);
+CREATE INDEX IF NOT EXISTS idx_meetings_lead ON meetings(lead_id);
+CREATE INDEX IF NOT EXISTS idx_meetings_deal ON meetings(deal_id);
+"""
+
+V14_EMAIL_NURTURE = """
+CREATE TABLE IF NOT EXISTS email_sequences (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  name TEXT NOT NULL,
+  description TEXT,
+  trigger_event TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'DRAFT',
+  steps TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_email_sequences_status ON email_sequences(status);
+
+CREATE TABLE IF NOT EXISTS email_enrollments (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  sequence_id TEXT NOT NULL REFERENCES email_sequences(id) ON DELETE CASCADE,
+  lead_id TEXT NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'ACTIVE',
+  current_step INTEGER DEFAULT 0,
+  enrolled_at TEXT NOT NULL,
+  completed_at TEXT,
+  unsubscribed_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_email_enrollments_seq_lead ON email_enrollments(sequence_id, lead_id);
+
+CREATE TABLE IF NOT EXISTS email_suppression_list (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  email TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  source TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_email_suppression_email ON email_suppression_list(email);
+"""
+
+
+V15_ACADEMY = """
+CREATE TABLE IF NOT EXISTS academy_content (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  title TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  content_type TEXT NOT NULL,
+  description TEXT,
+  difficulty TEXT NOT NULL DEFAULT 'beginner',
+  duration_minutes INTEGER,
+  parent_id TEXT REFERENCES academy_content(id),
+  prerequisites TEXT NOT NULL DEFAULT '[]',
+  tags TEXT NOT NULL DEFAULT '[]',
+  metadata TEXT NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'DRAFT',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_academy_content_slug ON academy_content(slug);
+CREATE INDEX IF NOT EXISTS idx_academy_content_type ON academy_content(content_type);
+CREATE INDEX IF NOT EXISTS idx_academy_content_status ON academy_content(status);
+CREATE INDEX IF NOT EXISTS idx_academy_content_parent ON academy_content(parent_id);
+
+CREATE TABLE IF NOT EXISTS academy_enrollments (
+  id TEXT PRIMARY KEY,
+  content_id TEXT NOT NULL REFERENCES academy_content(id) ON DELETE CASCADE,
+  learner_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'ENROLLED',
+  progress_pct REAL DEFAULT 0,
+  notes TEXT,
+  enrolled_at TEXT NOT NULL,
+  completed_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_academy_enrollments_learner ON academy_enrollments(content_id, learner_id);
+CREATE INDEX IF NOT EXISTS idx_academy_enrollments_status ON academy_enrollments(status);
+
+CREATE TABLE IF NOT EXISTS academy_certifications (
+  id TEXT PRIMARY KEY,
+  content_id TEXT NOT NULL REFERENCES academy_content(id),
+  learner_id TEXT NOT NULL,
+  assessment_score REAL,
+  issued_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_academy_certifications_learner ON academy_certifications(learner_id);
+"""
+
+V16_COMMUNITY = """
+CREATE TABLE IF NOT EXISTS community_members (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  external_id TEXT,
+  name TEXT NOT NULL,
+  email TEXT,
+  platform TEXT NOT NULL DEFAULT 'internal',
+  role TEXT NOT NULL DEFAULT 'member',
+  joined_at TEXT NOT NULL,
+  last_active_at TEXT,
+  metadata TEXT NOT NULL DEFAULT '{}'
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_community_members_external ON community_members(external_id);
+CREATE INDEX IF NOT EXISTS idx_community_members_platform ON community_members(platform);
+
+CREATE TABLE IF NOT EXISTS community_threads (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  channel TEXT NOT NULL,
+  title TEXT NOT NULL,
+  author_id TEXT REFERENCES community_members(id),
+  tags TEXT NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL DEFAULT 'open',
+  reply_count INTEGER DEFAULT 0,
+  last_reply_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_community_threads_channel ON community_threads(channel);
+CREATE INDEX IF NOT EXISTS idx_community_threads_status ON community_threads(status);
+
+CREATE TABLE IF NOT EXISTS community_replies (
+  id TEXT PRIMARY KEY,
+  thread_id TEXT NOT NULL REFERENCES community_threads(id) ON DELETE CASCADE,
+  author_id TEXT REFERENCES community_members(id),
+  content TEXT NOT NULL,
+  is_answer BOOLEAN DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_community_replies_thread ON community_replies(thread_id);
+"""
+
+
 MIGRATIONS: list[tuple[int, str, str]] = [
     (1, "bootstrap", V1_BOOTSTRAP),
     (2, "knowledge_phase1", V2_KNOWLEDGE_PHASE1),
@@ -447,6 +781,13 @@ MIGRATIONS: list[tuple[int, str, str]] = [
     (7, "blog_publisher", V7_BLOG),
     (8, "social_scheduler", V8_SOCIAL),
     (9, "analytics", V9_ANALYTICS),
+    (10, "campaigns", V10_CAMPAIGNS),
+    (11, "leads", V11_LEADS),
+    (12, "crm", V12_CRM),
+    (13, "meetings", V13_MEETINGS),
+    (14, "email_nurture", V14_EMAIL_NURTURE),
+    (15, "academy", V15_ACADEMY),
+    (16, "community", V16_COMMUNITY),
 ]
 
 MAX_VERSION = max(v for v, _, _ in MIGRATIONS)

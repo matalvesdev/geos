@@ -1382,6 +1382,1190 @@ class SocialPostRepository:
             )
 
 
+class CampaignRepository:
+    """Campaigns with content/social/experiment linking (SPEC-040)."""
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def create(
+        self,
+        name: str,
+        slug: str,
+        campaign_type: str,
+        hypothesis: str | None = None,
+        objective: str | None = None,
+        audience: str | None = None,
+        budget: float | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        target_metrics: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
+    ) -> str:
+        campaign_id = new_id()
+        now = now_iso()
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO campaigns (id, workspace_id, name, slug, campaign_type,"
+                " hypothesis, objective, audience, budget, start_date, end_date,"
+                " target_metrics, tags, status, total_spend, created_at, updated_at)"
+                " VALUES (?, 'default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PLANNED', 0, ?, ?)",
+                (
+                    campaign_id, name, slug, campaign_type, hypothesis, objective,
+                    audience, budget, start_date, end_date,
+                    json.dumps(target_metrics or {}, ensure_ascii=False),
+                    json.dumps(tags or [], ensure_ascii=False), now, now,
+                ),
+            )
+        return campaign_id
+
+    def get(self, campaign_id: str) -> dict[str, Any] | None:
+        row = self._db.conn_checked.execute(
+            "SELECT * FROM campaigns WHERE id = ?", (campaign_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        return self._decode(dict(row))
+
+    def by_slug(self, slug: str) -> dict[str, Any] | None:
+        row = self._db.conn_checked.execute(
+            "SELECT * FROM campaigns WHERE slug = ?", (slug,)
+        ).fetchone()
+        return self._decode(dict(row)) if row else None
+
+    def list(
+        self,
+        status: str | None = None,
+        campaign_type: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        q = "SELECT * FROM campaigns"
+        clauses: list[str] = []
+        params: list[Any] = []
+        if status:
+            clauses.append("status = ?")
+            params.append(status)
+        if campaign_type:
+            clauses.append("campaign_type = ?")
+            params.append(campaign_type)
+        if clauses:
+            q += " WHERE " + " AND ".join(clauses)
+        q += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        rows = self._db.conn_checked.execute(q, params).fetchall()
+        return [self._decode(dict(r)) for r in rows]
+
+    def update_status(self, campaign_id: str, status: str) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "UPDATE campaigns SET status = ?, updated_at = ? WHERE id = ?",
+                (status, now_iso(), campaign_id),
+            )
+
+    def update(self, campaign_id: str, **fields: Any) -> None:
+        allowed = {
+            "name", "hypothesis", "objective", "audience", "budget",
+            "start_date", "end_date", "target_metrics", "tags",
+            "result", "cancel_reason",
+        }
+        updates = {k: v for k, v in fields.items() if k in allowed and v is not None}
+        if not updates:
+            return
+        set_clauses = []
+        params: list[Any] = []
+        for key, value in updates.items():
+            set_clauses.append(f"{key} = ?")
+            if key in ("target_metrics", "tags"):
+                params.append(json.dumps(value, ensure_ascii=False))
+            else:
+                params.append(value)
+        set_clauses.append("updated_at = ?")
+        params.append(now_iso())
+        params.append(campaign_id)
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                f"UPDATE campaigns SET {', '.join(set_clauses)} WHERE id = ?", params
+            )
+
+    def add_content(self, campaign_id: str, content_id: str) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT OR IGNORE INTO campaign_content"
+                " (campaign_id, content_id, created_at) VALUES (?, ?, ?)",
+                (campaign_id, content_id, now_iso()),
+            )
+
+    def remove_content(self, campaign_id: str, content_id: str) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "DELETE FROM campaign_content WHERE campaign_id = ? AND content_id = ?",
+                (campaign_id, content_id),
+            )
+
+    def list_content(self, campaign_id: str) -> list[dict[str, Any]]:
+        rows = self._db.conn_checked.execute(
+            "SELECT c.* FROM content c"
+            " JOIN campaign_content cc ON c.id = cc.content_id"
+            " WHERE cc.campaign_id = ? ORDER BY cc.created_at",
+            (campaign_id,),
+        ).fetchall()
+        return [ContentRepository._decode(dict(r)) for r in rows]
+
+    def add_social_post(self, campaign_id: str, post_id: str) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT OR IGNORE INTO campaign_social"
+                " (campaign_id, post_id, created_at) VALUES (?, ?, ?)",
+                (campaign_id, post_id, now_iso()),
+            )
+
+    def remove_social_post(self, campaign_id: str, post_id: str) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "DELETE FROM campaign_social WHERE campaign_id = ? AND post_id = ?",
+                (campaign_id, post_id),
+            )
+
+    def list_social_posts(self, campaign_id: str) -> list[dict[str, Any]]:
+        rows = self._db.conn_checked.execute(
+            "SELECT sp.* FROM social_posts sp"
+            " JOIN campaign_social cs ON sp.id = cs.post_id"
+            " WHERE cs.campaign_id = ? ORDER BY cs.created_at",
+            (campaign_id,),
+        ).fetchall()
+        items = []
+        for row in rows:
+            item = dict(row)
+            try:
+                item["hashtags"] = json.loads(item["hashtags"] or "[]")
+            except json.JSONDecodeError:
+                item["hashtags"] = []
+            items.append(item)
+        return items
+
+    def add_experiment(self, campaign_id: str, experiment_id: str) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT OR IGNORE INTO campaign_experiments"
+                " (campaign_id, experiment_id, created_at) VALUES (?, ?, ?)",
+                (campaign_id, experiment_id, now_iso()),
+            )
+
+    def remove_experiment(self, campaign_id: str, experiment_id: str) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "DELETE FROM campaign_experiments WHERE campaign_id = ? AND experiment_id = ?",
+                (campaign_id, experiment_id),
+            )
+
+    def list_experiments(self, campaign_id: str) -> list[dict[str, Any]]:
+        rows = self._db.conn_checked.execute(
+            "SELECT e.* FROM experiments e"
+            " JOIN campaign_experiments ce ON e.id = ce.experiment_id"
+            " WHERE ce.campaign_id = ? ORDER BY ce.created_at",
+            (campaign_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def record_metric(
+        self,
+        campaign_id: str,
+        metric_name: str,
+        value: float,
+        source: str | None = None,
+    ) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO campaign_metrics"
+                " (id, campaign_id, metric_name, value, source, recorded_at)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
+                (new_id(), campaign_id, metric_name, value, source, now_iso()),
+            )
+
+    def get_metrics(self, campaign_id: str) -> dict[str, Any]:
+        rows = self._db.conn_checked.execute(
+            "SELECT metric_name, value, source, recorded_at FROM campaign_metrics"
+            " WHERE campaign_id = ? ORDER BY recorded_at",
+            (campaign_id,),
+        ).fetchall()
+        metrics: dict[str, Any] = {}
+        for row in rows:
+            name = row["metric_name"]
+            if name not in metrics:
+                metrics[name] = {"values": [], "latest": 0, "sum": 0, "count": 0}
+            metrics[name]["values"].append({
+                "value": row["value"],
+                "source": row["source"],
+                "recorded_at": row["recorded_at"],
+            })
+            metrics[name]["latest"] = row["value"]
+            metrics[name]["sum"] += row["value"]
+            metrics[name]["count"] += 1
+        return metrics
+
+    def record_spend(
+        self, campaign_id: str, amount: float, description: str | None = None
+    ) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO campaign_spends"
+                " (id, campaign_id, amount, description, recorded_at)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (new_id(), campaign_id, amount, description, now_iso()),
+            )
+            self._db.conn_checked.execute(
+                "UPDATE campaigns SET total_spend = total_spend + ?, updated_at = ?"
+                " WHERE id = ?",
+                (amount, now_iso(), campaign_id),
+            )
+
+    def list_spends(self, campaign_id: str) -> list[dict[str, Any]]:
+        rows = self._db.conn_checked.execute(
+            "SELECT * FROM campaign_spends WHERE campaign_id = ? ORDER BY recorded_at",
+            (campaign_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    @staticmethod
+    def _decode(item: dict[str, Any]) -> dict[str, Any]:
+        for key in ("target_metrics", "tags"):
+            try:
+                item[key] = json.loads(item[key] or "{}" if key == "target_metrics" else "[]")
+            except json.JSONDecodeError:
+                item[key] = {} if key == "target_metrics" else []
+        return item
+
+
+class LeadRepository:
+    """Leads with scoring, qualification, and interactions (SPEC-026/027/028)."""
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def create(
+        self,
+        email: str,
+        name: str | None = None,
+        company: str | None = None,
+        source: str = "manual",
+        tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> str:
+        lead_id = new_id()
+        now = now_iso()
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO leads (id, workspace_id, email, name, company, source,"
+                " tags, metadata, status, interaction_count, created_at, updated_at)"
+                " VALUES (?, 'default', ?, ?, ?, ?, ?, ?, 'CAPTURED', 0, ?, ?)",
+                (
+                    lead_id, email, name, company, source,
+                    json.dumps(tags or [], ensure_ascii=False),
+                    json.dumps(metadata or {}, ensure_ascii=False), now, now,
+                ),
+            )
+        return lead_id
+
+    def get(self, lead_id: str) -> dict[str, Any] | None:
+        row = self._db.conn_checked.execute(
+            "SELECT * FROM leads WHERE id = ?", (lead_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        return self._decode(dict(row))
+
+    def by_email(self, email: str) -> dict[str, Any] | None:
+        row = self._db.conn_checked.execute(
+            "SELECT * FROM leads WHERE email = ?", (email.lower(),)
+        ).fetchone()
+        return self._decode(dict(row)) if row else None
+
+    def list(
+        self,
+        status: str | None = None,
+        source: str | None = None,
+        company: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        q = "SELECT * FROM leads"
+        clauses: list[str] = []
+        params: list[Any] = []
+        if status:
+            clauses.append("status = ?")
+            params.append(status)
+        if source:
+            clauses.append("source = ?")
+            params.append(source)
+        if company:
+            clauses.append("company = ?")
+            params.append(company)
+        if clauses:
+            q += " WHERE " + " AND ".join(clauses)
+        q += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        rows = self._db.conn_checked.execute(q, params).fetchall()
+        return [self._decode(dict(r)) for r in rows]
+
+    def update_status(self, lead_id: str, status: str) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "UPDATE leads SET status = ?, updated_at = ? WHERE id = ?",
+                (status, now_iso(), lead_id),
+            )
+
+    def update_qualification(self, lead_id: str, method: str, criteria: dict[str, Any]) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "UPDATE leads SET qualification_method = ?, qualification_criteria = ?,"
+                " qualified_at = ?, updated_at = ? WHERE id = ?",
+                (method, json.dumps(criteria, ensure_ascii=False), now_iso(), now_iso(), lead_id),
+            )
+
+    def disqualify(self, lead_id: str, reason: str, notes: str | None) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "UPDATE leads SET disqualification_reason = ?, disqualification_notes = ?,"
+                " disqualified_at = ?, updated_at = ? WHERE id = ?",
+                (reason, notes, now_iso(), now_iso(), lead_id),
+            )
+
+    def update_score(self, lead_id: str, score: float, breakdown: dict[str, Any]) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "UPDATE leads SET score = ?, score_breakdown = ?, updated_at = ? WHERE id = ?",
+                (score, json.dumps(breakdown, ensure_ascii=False), now_iso(), lead_id),
+            )
+
+    def record_interaction(
+        self,
+        lead_id: str,
+        interaction_type: str,
+        summary: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO lead_interactions"
+                " (id, lead_id, interaction_type, summary, metadata, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
+                (new_id(), lead_id, interaction_type, summary,
+                 json.dumps(metadata or {}, ensure_ascii=False), now_iso()),
+            )
+
+    def increment_interactions(self, lead_id: str) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "UPDATE leads SET interaction_count = interaction_count + 1,"
+                " updated_at = ? WHERE id = ?",
+                (now_iso(), lead_id),
+            )
+
+    def list_interactions(self, lead_id: str) -> list[dict[str, Any]]:
+        rows = self._db.conn_checked.execute(
+            "SELECT * FROM lead_interactions WHERE lead_id = ? ORDER BY created_at",
+            (lead_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    @staticmethod
+    def _decode(item: dict[str, Any]) -> dict[str, Any]:
+        for key in ("tags", "metadata", "score_breakdown", "qualification_criteria"):
+            try:
+                item[key] = json.loads(item[key] or "{}" if key in ("metadata", "score_breakdown", "qualification_criteria") else "[]")
+            except json.JSONDecodeError:
+                item[key] = {} if key in ("metadata", "score_breakdown", "qualification_criteria") else []
+        return item
+
+
+class CRMRepository:
+    """CRM deals, stages, and activities (SPEC-029)."""
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    # ---- stages ------------------------------------------------------------
+    def create_stage(
+        self, name: str, order: int, probability: float = 0,
+        is_won: bool = False, is_lost: bool = False,
+    ) -> str:
+        stage_id = new_id()
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO crm_deal_stages"
+                " (id, workspace_id, name, \"order\", probability, is_won, is_lost)"
+                " VALUES (?, 'default', ?, ?, ?, ?, ?)",
+                (stage_id, name, order, probability, 1 if is_won else 0, 1 if is_lost else 0),
+            )
+        return stage_id
+
+    def list_stages(self) -> list[dict[str, Any]]:
+        rows = self._db.conn_checked.execute(
+            "SELECT * FROM crm_deal_stages ORDER BY \"order\""
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ---- deals -------------------------------------------------------------
+    def create_deal(
+        self, name: str, lead_id: str | None = None, value: float | None = None,
+        currency: str = "BRL", expected_close_date: str | None = None,
+        owner_id: str | None = None, tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> str:
+        deal_id = new_id()
+        now = now_iso()
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO crm_deals"
+                " (id, workspace_id, lead_id, name, value, currency, stage, probability,"
+                " expected_close_date, owner_id, tags, metadata, status, created_at, updated_at)"
+                " VALUES (?, 'default', ?, ?, ?, ?, 'PROSPECTING', 0.1, ?, ?, ?, ?, 'OPEN', ?, ?)",
+                (
+                    deal_id, lead_id, name, value, currency, expected_close_date,
+                    owner_id, json.dumps(tags or [], ensure_ascii=False),
+                    json.dumps(metadata or {}, ensure_ascii=False), now, now,
+                ),
+            )
+        return deal_id
+
+    def get_deal(self, deal_id: str) -> dict[str, Any] | None:
+        row = self._db.conn_checked.execute(
+            "SELECT * FROM crm_deals WHERE id = ?", (deal_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        return self._decode_deal(dict(row))
+
+    def list_deals(
+        self, status: str | None = None, stage: str | None = None,
+        owner_id: str | None = None, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        q = "SELECT * FROM crm_deals"
+        clauses: list[str] = []
+        params: list[Any] = []
+        if status:
+            clauses.append("status = ?")
+            params.append(status)
+        if stage:
+            clauses.append("stage = ?")
+            params.append(stage)
+        if owner_id:
+            clauses.append("owner_id = ?")
+            params.append(owner_id)
+        if clauses:
+            q += " WHERE " + " AND ".join(clauses)
+        q += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        rows = self._db.conn_checked.execute(q, params).fetchall()
+        return [self._decode_deal(dict(r)) for r in rows]
+
+    def update_deal_stage(self, deal_id: str, stage: str, probability: float) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "UPDATE crm_deals SET stage = ?, probability = ?, updated_at = ? WHERE id = ?",
+                (stage, probability, now_iso(), deal_id),
+            )
+
+    def update_deal_status(self, deal_id: str, status: str) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "UPDATE crm_deals SET status = ?, updated_at = ? WHERE id = ?",
+                (status, now_iso(), deal_id),
+            )
+
+    def update_deal(self, deal_id: str, **fields: Any) -> None:
+        allowed = {"name", "value", "currency", "expected_close_date",
+                   "owner_id", "tags", "metadata"}
+        updates = {k: v for k, v in fields.items() if k in allowed and v is not None}
+        if not updates:
+            return
+        set_clauses = []
+        params: list[Any] = []
+        for key, value in updates.items():
+            set_clauses.append(f"{key} = ?")
+            if key in ("tags", "metadata"):
+                params.append(json.dumps(value, ensure_ascii=False))
+            else:
+                params.append(value)
+        set_clauses.append("updated_at = ?")
+        params.append(now_iso())
+        params.append(deal_id)
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                f"UPDATE crm_deals SET {', '.join(set_clauses)} WHERE id = ?", params
+            )
+
+    # ---- activities --------------------------------------------------------
+    def create_activity(
+        self, activity_type: str, deal_id: str | None = None,
+        lead_id: str | None = None, subject: str | None = None,
+        description: str | None = None, due_date: str | None = None,
+        owner_id: str | None = None,
+    ) -> str:
+        activity_id = new_id()
+        now = now_iso()
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO crm_activities"
+                " (id, workspace_id, deal_id, lead_id, activity_type, subject,"
+                " description, due_date, owner_id, created_at, updated_at)"
+                " VALUES (?, 'default', ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (activity_id, deal_id, lead_id, activity_type, subject,
+                 description, due_date, owner_id, now, now),
+            )
+        return activity_id
+
+    def get_activity(self, activity_id: str) -> dict[str, Any] | None:
+        row = self._db.conn_checked.execute(
+            "SELECT * FROM crm_activities WHERE id = ?", (activity_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def list_activities(
+        self, deal_id: str | None = None, lead_id: str | None = None,
+        activity_type: str | None = None, completed: bool | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        q = "SELECT * FROM crm_activities"
+        clauses: list[str] = []
+        params: list[Any] = []
+        if deal_id:
+            clauses.append("deal_id = ?")
+            params.append(deal_id)
+        if lead_id:
+            clauses.append("lead_id = ?")
+            params.append(lead_id)
+        if activity_type:
+            clauses.append("activity_type = ?")
+            params.append(activity_type)
+        if completed is not None:
+            clauses.append("completed = ?")
+            params.append(1 if completed else 0)
+        if clauses:
+            q += " WHERE " + " AND ".join(clauses)
+        q += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        rows = self._db.conn_checked.execute(q, params).fetchall()
+        return [dict(r) for r in rows]
+
+    def complete_activity(self, activity_id: str, notes: str | None = None) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "UPDATE crm_activities SET completed = 1, updated_at = ? WHERE id = ?",
+                (now_iso(), activity_id),
+            )
+
+    @staticmethod
+    def _decode_deal(item: dict[str, Any]) -> dict[str, Any]:
+        for key in ("tags", "metadata"):
+            try:
+                item[key] = json.loads(item[key] or "[]")
+            except json.JSONDecodeError:
+                item[key] = []
+        return item
+
+
+class MeetingRepository:
+    """Meeting scheduling (SPEC-031/032)."""
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def create(
+        self, title: str, scheduled_at: str, lead_id: str | None = None,
+        deal_id: str | None = None, meeting_type: str = "discovery",
+        duration_minutes: int = 30, timezone: str = "UTC",
+        location: str | None = None, meeting_url: str | None = None,
+        description: str | None = None, owner_id: str | None = None,
+        attendees: list[str] | None = None,
+    ) -> str:
+        meeting_id = new_id()
+        now = now_iso()
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO meetings"
+                " (id, workspace_id, lead_id, deal_id, title, description,"
+                " meeting_type, scheduled_at, duration_minutes, timezone,"
+                " location, meeting_url, status, owner_id, attendees,"
+                " created_at, updated_at)"
+                " VALUES (?, 'default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SCHEDULED', ?, ?, ?, ?)",
+                (
+                    meeting_id, lead_id, deal_id, title, description, meeting_type,
+                    scheduled_at, duration_minutes, timezone, location, meeting_url,
+                    owner_id, json.dumps(attendees or [], ensure_ascii=False), now, now,
+                ),
+            )
+        return meeting_id
+
+    def get(self, meeting_id: str) -> dict[str, Any] | None:
+        row = self._db.conn_checked.execute(
+            "SELECT * FROM meetings WHERE id = ?", (meeting_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        item = dict(row)
+        try:
+            item["attendees"] = json.loads(item["attendees"] or "[]")
+        except json.JSONDecodeError:
+            item["attendees"] = []
+        return item
+
+    def list(
+        self, status: str | None = None, lead_id: str | None = None,
+        deal_id: str | None = None, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        q = "SELECT * FROM meetings"
+        clauses: list[str] = []
+        params: list[Any] = []
+        if status:
+            clauses.append("status = ?")
+            params.append(status)
+        if lead_id:
+            clauses.append("lead_id = ?")
+            params.append(lead_id)
+        if deal_id:
+            clauses.append("deal_id = ?")
+            params.append(deal_id)
+        if clauses:
+            q += " WHERE " + " AND ".join(clauses)
+        q += " ORDER BY scheduled_at DESC LIMIT ?"
+        params.append(limit)
+        rows = self._db.conn_checked.execute(q, params).fetchall()
+        items = []
+        for row in rows:
+            item = dict(row)
+            try:
+                item["attendees"] = json.loads(item["attendees"] or "[]")
+            except json.JSONDecodeError:
+                item["attendees"] = []
+            items.append(item)
+        return items
+
+    def update_status(self, meeting_id: str, status: str) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "UPDATE meetings SET status = ?, updated_at = ? WHERE id = ?",
+                (status, now_iso(), meeting_id),
+            )
+
+    def complete(self, meeting_id: str, notes: str | None = None, outcome: str | None = None) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "UPDATE meetings SET status = 'COMPLETED', notes = ?, outcome = ?,"
+                " updated_at = ? WHERE id = ?",
+                (notes, outcome, now_iso(), meeting_id),
+            )
+
+    def upcoming(self, limit: int = 10) -> list[dict[str, Any]]:
+        """Get upcoming meetings (SCHEDULED and future)."""
+        now = now_iso()
+        rows = self._db.conn_checked.execute(
+            "SELECT * FROM meetings WHERE status = 'SCHEDULED'"
+            " AND scheduled_at >= ? ORDER BY scheduled_at ASC LIMIT ?",
+            (now, limit),
+        ).fetchall()
+        items = []
+        for row in rows:
+            item = dict(row)
+            try:
+                item["attendees"] = json.loads(item["attendees"] or "[]")
+            except json.JSONDecodeError:
+                item["attendees"] = []
+            items.append(item)
+        return items
+
+
+class EmailRepository:
+    """Email sequences and nurture (SPEC-033)."""
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def create_sequence(
+        self, name: str, trigger_event: str, description: str | None = None,
+        steps: list[dict[str, Any]] | None = None,
+    ) -> str:
+        seq_id = new_id()
+        now = now_iso()
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO email_sequences"
+                " (id, workspace_id, name, description, trigger_event,"
+                " status, steps, created_at, updated_at)"
+                " VALUES (?, 'default', ?, ?, ?, 'DRAFT', ?, ?, ?)",
+                (
+                    seq_id, name, description, trigger_event,
+                    json.dumps(steps or [], ensure_ascii=False), now, now,
+                ),
+            )
+        return seq_id
+
+    def get_sequence(self, sequence_id: str) -> dict[str, Any] | None:
+        row = self._db.conn_checked.execute(
+            "SELECT * FROM email_sequences WHERE id = ?", (sequence_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        item = dict(row)
+        try:
+            item["steps"] = json.loads(item["steps"] or "[]")
+        except json.JSONDecodeError:
+            item["steps"] = []
+        return item
+
+    def list_sequences(self, status: str | None = None) -> list[dict[str, Any]]:
+        q = "SELECT * FROM email_sequences"
+        params: list[Any] = []
+        if status:
+            q += " WHERE status = ?"
+            params.append(status)
+        q += " ORDER BY created_at DESC"
+        rows = self._db.conn_checked.execute(q, params).fetchall()
+        items = []
+        for row in rows:
+            item = dict(row)
+            try:
+                item["steps"] = json.loads(item["steps"] or "[]")
+            except json.JSONDecodeError:
+                item["steps"] = []
+            items.append(item)
+        return items
+
+    def enroll_lead(self, sequence_id: str, lead_id: str) -> str:
+        enrollment_id = new_id()
+        now = now_iso()
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO email_enrollments"
+                " (id, workspace_id, sequence_id, lead_id, status, current_step,"
+                " enrolled_at, created_at, updated_at)"
+                " VALUES (?, 'default', ?, ?, 'ACTIVE', 0, ?, ?, ?)",
+                (enrollment_id, sequence_id, lead_id, now, now, now),
+            )
+        return enrollment_id
+
+    def list_enrollments(self, sequence_id: str | None = None, lead_id: str | None = None) -> list[dict[str, Any]]:
+        q = "SELECT * FROM email_enrollments"
+        clauses: list[str] = []
+        params: list[Any] = []
+        if sequence_id:
+            clauses.append("sequence_id = ?")
+            params.append(sequence_id)
+        if lead_id:
+            clauses.append("lead_id = ?")
+            params.append(lead_id)
+        if clauses:
+            q += " WHERE " + " AND ".join(clauses)
+        q += " ORDER BY enrolled_at DESC"
+        rows = self._db.conn_checked.execute(q, params).fetchall()
+        return [dict(r) for r in rows]
+
+    def add_to_suppression(self, email: str, reason: str, source: str | None = None) -> str:
+        suppression_id = new_id()
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT OR IGNORE INTO email_suppression_list"
+                " (id, workspace_id, email, reason, source, created_at)"
+                " VALUES (?, 'default', ?, ?, ?, ?)",
+                (suppression_id, email.lower(), reason, source, now_iso()),
+            )
+        return suppression_id
+
+    def is_suppressed(self, email: str) -> bool:
+        row = self._db.conn_checked.execute(
+            "SELECT id FROM email_suppression_list WHERE email = ?",
+            (email.lower(),),
+        ).fetchone()
+        return row is not None
+
+    def list_suppressions(self) -> list[dict[str, Any]]:
+        rows = self._db.conn_checked.execute(
+            "SELECT * FROM email_suppression_list ORDER BY created_at DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def update_sequence_status(self, sequence_id: str, status: str) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "UPDATE email_sequences SET status = ?, updated_at = ? WHERE id = ?",
+                (status, now_iso(), sequence_id),
+            )
+
+    def complete_enrollment(self, enrollment_id: str) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "UPDATE email_enrollments SET status = 'COMPLETED', completed_at = ?,"
+                " updated_at = ? WHERE id = ?",
+                (now_iso(), now_iso(), enrollment_id),
+            )
+
+    def update_enrollment_step(self, enrollment_id: str, step: int) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "UPDATE email_enrollments SET current_step = ?, updated_at = ? WHERE id = ?",
+                (step, now_iso(), enrollment_id),
+            )
+
+
+class AcademyRepository:
+    """Academy content, learner progress, and certifications (SPEC-036)."""
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    def create(
+        self, title: str, slug: str, content_type: str,
+        description: str | None = None, difficulty: str = "beginner",
+        duration_minutes: int | None = None, parent_id: str | None = None,
+        prerequisites: list[str] | None = None, tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> str:
+        content_id = new_id()
+        now = now_iso()
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO academy_content"
+                " (id, workspace_id, title, slug, content_type, description,"
+                " difficulty, duration_minutes, parent_id, prerequisites,"
+                " tags, metadata, status, created_at, updated_at)"
+                " VALUES (?, 'default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT', ?, ?)",
+                (
+                    content_id, title, slug, content_type, description,
+                    difficulty, duration_minutes, parent_id,
+                    json.dumps(prerequisites or [], ensure_ascii=False),
+                    json.dumps(tags or [], ensure_ascii=False),
+                    json.dumps(metadata or {}, ensure_ascii=False), now, now,
+                ),
+            )
+        return content_id
+
+    def get(self, content_id: str) -> dict[str, Any] | None:
+        row = self._db.conn_checked.execute(
+            "SELECT * FROM academy_content WHERE id = ?", (content_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        return self._decode(dict(row))
+
+    def by_slug(self, slug: str) -> dict[str, Any] | None:
+        row = self._db.conn_checked.execute(
+            "SELECT * FROM academy_content WHERE slug = ?", (slug,)
+        ).fetchone()
+        return self._decode(dict(row)) if row else None
+
+    def list(
+        self, content_type: str | None = None, status: str | None = None,
+        difficulty: str | None = None, parent_id: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        q = "SELECT * FROM academy_content"
+        clauses: list[str] = []
+        params: list[Any] = []
+        if content_type:
+            clauses.append("content_type = ?")
+            params.append(content_type)
+        if status:
+            clauses.append("status = ?")
+            params.append(status)
+        if difficulty:
+            clauses.append("difficulty = ?")
+            params.append(difficulty)
+        if parent_id:
+            clauses.append("parent_id = ?")
+            params.append(parent_id)
+        if clauses:
+            q += " WHERE " + " AND ".join(clauses)
+        q += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        rows = self._db.conn_checked.execute(q, params).fetchall()
+        return [self._decode(dict(r)) for r in rows]
+
+    def update_status(self, content_id: str, status: str) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "UPDATE academy_content SET status = ?, updated_at = ? WHERE id = ?",
+                (status, now_iso(), content_id),
+            )
+
+    def enroll_learner(self, content_id: str, learner_id: str) -> str:
+        enrollment_id = new_id()
+        now = now_iso()
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO academy_enrollments"
+                " (id, content_id, learner_id, status, progress_pct,"
+                " enrolled_at, created_at, updated_at)"
+                " VALUES (?, ?, ?, 'ENROLLED', 0, ?, ?, ?)",
+                (enrollment_id, content_id, learner_id, now, now, now),
+            )
+        return enrollment_id
+
+    def get_enrollment(self, enrollment_id: str) -> dict[str, Any] | None:
+        row = self._db.conn_checked.execute(
+            "SELECT * FROM academy_enrollments WHERE id = ?", (enrollment_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def get_enrollment_by_learner(self, content_id: str, learner_id: str) -> dict[str, Any] | None:
+        row = self._db.conn_checked.execute(
+            "SELECT * FROM academy_enrollments WHERE content_id = ? AND learner_id = ?",
+            (content_id, learner_id),
+        ).fetchone()
+        return dict(row) if row else None
+
+    def update_progress(self, enrollment_id: str, progress_pct: float, notes: str | None) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "UPDATE academy_enrollments SET progress_pct = ?, notes = ?,"
+                " updated_at = ? WHERE id = ?",
+                (progress_pct, notes, now_iso(), enrollment_id),
+            )
+
+    def update_enrollment_status(self, enrollment_id: str, status: str) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "UPDATE academy_enrollments SET status = ?, updated_at = ? WHERE id = ?",
+                (status, now_iso(), enrollment_id),
+            )
+
+    def list_learners(self, content_id: str) -> list[dict[str, Any]]:
+        rows = self._db.conn_checked.execute(
+            "SELECT * FROM academy_enrollments WHERE content_id = ?"
+            " ORDER BY enrolled_at",
+            (content_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def list_learner_enrollments(self, learner_id: str) -> list[dict[str, Any]]:
+        rows = self._db.conn_checked.execute(
+            "SELECT e.*, c.title, c.content_type FROM academy_enrollments e"
+            " JOIN academy_content c ON e.content_id = c.id"
+            " WHERE e.learner_id = ? ORDER BY e.enrolled_at",
+            (learner_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def issue_certification(
+        self, content_id: str, learner_id: str, assessment_score: float | None
+    ) -> str:
+        cert_id = new_id()
+        now = now_iso()
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO academy_certifications"
+                " (id, content_id, learner_id, assessment_score, issued_at)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (cert_id, content_id, learner_id, assessment_score, now),
+            )
+        return cert_id
+
+    def get_certification(self, cert_id: str) -> dict[str, Any] | None:
+        row = self._db.conn_checked.execute(
+            "SELECT * FROM academy_certifications WHERE id = ?", (cert_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def list_certifications(self, learner_id: str | None = None) -> list[dict[str, Any]]:
+        q = "SELECT * FROM academy_certifications"
+        params: list[Any] = []
+        if learner_id:
+            q += " WHERE learner_id = ?"
+            params.append(learner_id)
+        q += " ORDER BY issued_at DESC"
+        rows = self._db.conn_checked.execute(q, params).fetchall()
+        return [dict(r) for r in rows]
+
+    @staticmethod
+    def _decode(item: dict[str, Any]) -> dict[str, Any]:
+        for key in ("prerequisites", "tags", "metadata"):
+            try:
+                item[key] = json.loads(item[key] or "[]" if key != "metadata" else "{}")
+            except json.JSONDecodeError:
+                item[key] = {} if key == "metadata" else []
+        return item
+
+
+class CommunityRepository:
+    """Community members, threads, and replies (SPEC-037)."""
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    # ---- members -----------------------------------------------------------
+    def add_member(
+        self, name: str, external_id: str | None = None, email: str | None = None,
+        platform: str = "internal", role: str = "member",
+        metadata: dict[str, Any] | None = None,
+    ) -> str:
+        member_id = new_id()
+        now = now_iso()
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO community_members"
+                " (id, workspace_id, external_id, name, email, platform,"
+                " role, joined_at, metadata)"
+                " VALUES (?, 'default', ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    member_id, external_id, name, email, platform, role, now,
+                    json.dumps(metadata or {}, ensure_ascii=False),
+                ),
+            )
+        return member_id
+
+    def get_member(self, member_id: str) -> dict[str, Any] | None:
+        row = self._db.conn_checked.execute(
+            "SELECT * FROM community_members WHERE id = ?", (member_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        item = dict(row)
+        try:
+            item["metadata"] = json.loads(item["metadata"] or "{}")
+        except json.JSONDecodeError:
+            item["metadata"] = {}
+        return item
+
+    def list_members(
+        self, platform: str | None = None, role: str | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        q = "SELECT * FROM community_members"
+        clauses: list[str] = []
+        params: list[Any] = []
+        if platform:
+            clauses.append("platform = ?")
+            params.append(platform)
+        if role:
+            clauses.append("role = ?")
+            params.append(role)
+        if clauses:
+            q += " WHERE " + " AND ".join(clauses)
+        q += " ORDER BY joined_at DESC LIMIT ?"
+        params.append(limit)
+        rows = self._db.conn_checked.execute(q, params).fetchall()
+        items = []
+        for row in rows:
+            item = dict(row)
+            try:
+                item["metadata"] = json.loads(item["metadata"] or "{}")
+            except json.JSONDecodeError:
+                item["metadata"] = {}
+            items.append(item)
+        return items
+
+    def update_activity(self, member_id: str) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "UPDATE community_members SET last_active_at = ? WHERE id = ?",
+                (now_iso(), member_id),
+            )
+
+    # ---- threads -----------------------------------------------------------
+    def create_thread(
+        self, channel: str, title: str, author_id: str | None = None,
+        tags: list[str] | None = None,
+    ) -> str:
+        thread_id = new_id()
+        now = now_iso()
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO community_threads"
+                " (id, workspace_id, channel, title, author_id, tags,"
+                " status, reply_count, created_at, updated_at)"
+                " VALUES (?, 'default', ?, ?, ?, ?, 'open', 0, ?, ?)",
+                (
+                    thread_id, channel, title, author_id,
+                    json.dumps(tags or [], ensure_ascii=False), now, now,
+                ),
+            )
+        return thread_id
+
+    def get_thread(self, thread_id: str) -> dict[str, Any] | None:
+        row = self._db.conn_checked.execute(
+            "SELECT * FROM community_threads WHERE id = ?", (thread_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        item = dict(row)
+        try:
+            item["tags"] = json.loads(item["tags"] or "[]")
+        except json.JSONDecodeError:
+            item["tags"] = []
+        return item
+
+    def list_threads(
+        self, channel: str | None = None, status: str | None = None,
+        author_id: str | None = None, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        q = "SELECT * FROM community_threads"
+        clauses: list[str] = []
+        params: list[Any] = []
+        if channel:
+            clauses.append("channel = ?")
+            params.append(channel)
+        if status:
+            clauses.append("status = ?")
+            params.append(status)
+        if author_id:
+            clauses.append("author_id = ?")
+            params.append(author_id)
+        if clauses:
+            q += " WHERE " + " AND ".join(clauses)
+        q += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        rows = self._db.conn_checked.execute(q, params).fetchall()
+        items = []
+        for row in rows:
+            item = dict(row)
+            try:
+                item["tags"] = json.loads(item["tags"] or "[]")
+            except json.JSONDecodeError:
+                item["tags"] = []
+            items.append(item)
+        return items
+
+    def update_thread_status(self, thread_id: str, status: str) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "UPDATE community_threads SET status = ?, updated_at = ? WHERE id = ?",
+                (status, now_iso(), thread_id),
+            )
+
+    def increment_reply_count(self, thread_id: str) -> None:
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "UPDATE community_threads SET reply_count = reply_count + 1,"
+                " last_reply_at = ?, updated_at = ? WHERE id = ?",
+                (now_iso(), now_iso(), thread_id),
+            )
+
+    # ---- replies -----------------------------------------------------------
+    def add_reply(
+        self, thread_id: str, author_id: str, content: str, is_answer: bool = False,
+    ) -> str:
+        reply_id = new_id()
+        with self._db.conn_checked:
+            self._db.conn_checked.execute(
+                "INSERT INTO community_replies"
+                " (id, thread_id, author_id, content, is_answer, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
+                (reply_id, thread_id, author_id, content, 1 if is_answer else 0, now_iso()),
+            )
+        return reply_id
+
+    def get_reply(self, reply_id: str) -> dict[str, Any] | None:
+        row = self._db.conn_checked.execute(
+            "SELECT * FROM community_replies WHERE id = ?", (reply_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def list_replies(self, thread_id: str) -> list[dict[str, Any]]:
+        rows = self._db.conn_checked.execute(
+            "SELECT * FROM community_replies WHERE thread_id = ?"
+            " ORDER BY created_at",
+            (thread_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 class RepoFactory:
     """Single access point to repositories for a given Database (SPEC-003 R3.1)."""
 
@@ -1402,6 +2586,13 @@ class RepoFactory:
         self.blog = BlogRepository(db)
         self.social = SocialPostRepository(db)
         self.analytics = AnalyticsRepository(db)
+        self.campaigns = CampaignRepository(db)
+        self.leads = LeadRepository(db)
+        self.crm = CRMRepository(db)
+        self.meetings = MeetingRepository(db)
+        self.email = EmailRepository(db)
+        self.academy = AcademyRepository(db)
+        self.community = CommunityRepository(db)
 
 
 def _fts_query(query: str) -> str:
