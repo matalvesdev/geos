@@ -1,6 +1,6 @@
 # GEOS — Growth, Education & Organizational System
 
-> Open-source · local-first · agentic organizational growth platform
+> Open-source · local-first · **AI agent framework for growth engineering**
 
 [![CI](https://github.com/matalvesdev/geos/actions/workflows/ci.yml/badge.svg)](https://github.com/matalvesdev/geos/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.11%20%7C%203.12%20%7C%203.13-3776AB?logo=python&logoColor=white)](https://github.com/matalvesdev/geos/blob/main/pyproject.toml)
@@ -8,9 +8,14 @@
 [![PyPI](https://img.shields.io/pypi/v/geos.svg?logo=pypi&logoColor=white)](https://pypi.org/project/geos/)
 [![Tests](https://img.shields.io/badge/tests-333%20passing-green)](https://github.com/matalvesdev/geos/actions/workflows/ci.yml)
 
-**GEOS** é uma plataforma agentic que transforma sinais de mercado em inteligência
-organizacional e ação coordenada — de forma mensurável e com supervisão humana em todo
-risco externo.
+**GEOS** é um framework open-source de agentes de IA para growth engineering.
+
+Ele orquestra agentes especializados — cada um com uma responsabilidade clara — que
+trabalham juntos para transformar sinais de mercado em ação coordenada: pesquisa,
+conhecimento, conteúdo, distribuição, leads, CRM, educação e analytics.
+
+Tudo com supervisão humana em cada risco externo. Tudo local-first. Tudo determinístico
+quando possível, LLM apenas quando necessário.
 
 ```
 SIGNALS → RESEARCH → KNOWLEDGE → STRATEGY → CONTENT → DISTRIBUTION → LEADS →
@@ -18,84 +23,108 @@ QUALIFICATION → MEETINGS → OPPORTUNITIES → CUSTOMERS → EDUCATION → COM
 ANALYTICS → LEARNING → (melhor conhecimento, estratégia, produto, distribuição)
 ```
 
+## Arquitetura de Agentes
+
+GEOS não é um "god agent" que faz tudo. É um **framework de agentes especializados**
+que colaboram via event bus, workflows declarativos e filas de jobs:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         CLI / API                               │
+├─────────────────────────────────────────────────────────────────┤
+│              Workflow Engine · Agent Runtime · Policy            │
+├─────────────────────────────────────────────────────────────────┤
+│          Event Bus · Job Queue · Scheduler (cron/interval)      │
+├─────────────────────────────────────────────────────────────────┤
+│   Intelligence Layer: SQLite (SQL+FTS) · RAG · Knowledge Graph  │
+├─────────────────────────────────────────────────────────────────┤
+│  Research · Content · SEO · Leads · CRM · Meetings · Academy    │
+│  Community · Analytics · Blog · Social · Campaigns · Email      │
+├─────────────────────────────────────────────────────────────────┤
+│       Action Gateway (approvals) → Integrations externas        │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Como os agentes colaboram
+
+- **Agentes declarativos** (YAML) com roles, tasks e conditions
+- **Workflows** orquestram a sequência de agentes com aprovação humana
+- **Event bus** persistido conecta agentes de forma desacoplada
+- **Job queue** com retry, backoff exponencial e dead-letter
+- **Scheduler** cron/intervalo para automações agendadas
+- **ModelProvider** protocolo único para LLMs (OpenAI-compatible, local ou nuvem)
+
+### Princípios do framework
+
+- **Determinístico primeiro, LLM por último**: cron, FTS, scoring, dedup e detecção são código puro
+- **Aprovação humana obrigatória**: nenhuma ação externa sem supervisão
+- **Agentes especializados**: cada agente tem uma responsabilidade clara (não um agente que faz tudo)
+- **Zero infra obrigatória**: SQLite + bus em processo para rodar o primeiro workflow
+- **Spec-Driven Development**: nada é documentado sem estar implementado
+
 ## Features
 
-- **Core agentic**: agentes declarativos (YAML), workflows com aprovação, jobs com retry
-  e dead-letter, scheduler cron/intervalo (parser próprio), event bus persistido.
-- **Conhecimento local**: ingestão de Markdown com dedup por hash, chunking por headings,
-  busca FTS5, embeddings locais determinísticos, **hybrid RAG** (FTS + vetores + graph
-  boost) com citações e proveniência.
-- **Knowledge Graph**: extração determinística de entidades (companhias, produtos, tópicos,
-  problemas) + relações `discusses`/`relates_to` em SQLite.
-- **Research Engine**: pipeline QUESTION → SOURCES → SYNTHESIS → INSIGHTS sobre o índice
-  local (nunca inventa fontes; síntese marcada `mock` até existir ModelProvider).
-- **Content Engine**: objetos de conteúdo tipados (18 tipos), scoring determinístico e
-  explicável, pipeline de status validado (IDEA → … → PUBLISHED) com versionamento,
-  repurposing determinístico — CLI `geos content`.
-- **Embeddings plugáveis**: local determinístico (hash) por padrão ou OpenAI-compatible
-  (OpenAI/Azure/vLLM/Ollama) via `knowledge.embeddings` — mesmo protocolo, zero deps.
-- **ModelProvider** (spec §35): protocolo único para LLMs (OpenAI-compatible, local ou
-  nuvem); síntese do research gerada por modelo **ancorada nas fontes com citações
-  [F#]** quando `models:` está configurado — fallback mock honesto sem config.
-- **SEO Engine**: auditoria determinística (broken links, órfãos, thin content, gaps de
-  conteúdo, cannibalização, decay heurístico) com snapshot persistido por run — CLI
-  `geos seo audit`.
-- **Opportunity & Experiment Engine**: coleta oportunidades de research + SEO gaps com
-  dedup idempotente, **scoring ICE/RICE explicável** (breakdown + razões — nunca só um
-  número) e lifecycle de experimentos validado (PROPOSED → RUNNING → COMPLETED com
-  decisão/learning) — CLI `geos opportunities` / `geos experiments`.
-- **Blog Publisher**: conteúdo aprovado → post markdown com front matter determinístico,
-  publicado via adapters (local headless por default; WordPress/Ghost em fases futuras)
-  — **aprovação humana obrigatória** antes de qualquer escrita (SPEC-024) — CLI
-  `geos blog prepare/publish`.
-- **Social Scheduler**: conteúdo aprovado → post determinístico por canal (X 280 /
-  LinkedIn 3000 / Bluesky 300 / Instagram 2200), com hashtags, CTA e truncamento
-  honesto; **agendamento** (SCHEDULED + `due`) e **aprovação humana obrigatória** antes
-  de qualquer escrita (SPEC-025) — CLI `geos social prepare/list/due/publish`. Inclui
-  **adapters reais de API** (X v2, LinkedIn Community Posts, Bluesky AT Protocol — zero
-  deps, credenciais via env) e **worker L3** (`geos social worker`) que executa apenas
-  posts pré-aprovados por humano.
-- **Analytics Engine**: métricas determinísticas (~22) sobre o estado local (content,
-  blog, social, SEO, growth, research, telemetry) com snapshot histórico + insights
-  por regra com evidência (OBSERVATION / INVESTIGATION / HYPOTHESIS honesta) — nunca
-  fabrica dados (SPEC-035) — CLI `geos analytics collect/metrics/insights`.
-- **Control Center**: dashboard **estático autocontido** (`geos control-center build`
-  → um `control-center.html` dark, zero JS/assets externos) com KPIs, insights,
-  aprovações, saúde e métricas — determinístico e read-only (SPEC-038).
-- **Campaign Orchestration** (SPEC-040): campanhas de crescimento com lifecycle
-  (`PLANNED → ACTIVE → PAUSED → COMPLETED / CANCELLED`), linking de conteúdo,
-  posts sociais e experimentos, métricas e orçamento — CLI `geos campaigns`.
-- **Bootstrap + Planner + Automations**: `geos bootstrap` cria workspace funcional
-  idempotente (workflows, docs ingeridos, conteúdo seed, automações — SPEC-103);
-  `geos plan` gera roteiro determinístico em 5 fases (SPEC-106); `geos automations
-  run` enfileira e processa rotinas agendadas (social worker L3, analytics,
-  opportunities, SEO) com `next_run` persistido (SPEC-006).
-- **Memory**: memória persistente com TTL/sensibilidade e scopes por domínio.
-- **Adoção não-destrutiva**: detecção GREENFIELD/BROWNFIELD/STANDALONE com evidências,
-  capability discovery por repo, manifest e Repository Registry.
-- **SQLite-first, zero infra obrigatória**: nada de Kafka/Redis/Postgres para rodar o
-  primeiro workflow; protocolos para trocar storage/LLM/embeddings depois.
+### Core Agentic
+
+- **Agentes declarativos** (YAML) com roles, tasks e conditions
+- **Workflows** com aprovação, retry e timeout
+- **Job queue** SQLite com dead-letter e backoff exponencial
+- **Scheduler** cron/intervalo (parser próprio, zero deps)
+- **Event bus** persistido com protocolo para adapters externos
+- **Memory** persistente com TTL, sensibilidade e scopes por domínio
+
+### Intelligence Layer
+
+- **Conhecimento local**: ingestão de Markdown com dedup por hash, chunking por headings, busca FTS5
+- **Hybrid RAG**: FTS + vetores + graph boost com citações e proveniência
+- **Knowledge Graph**: extração determinística de entidades + relações em SQLite
+- **Embeddings plugáveis**: local determinístico (hash) ou OpenAI-compatible (OpenAI/Azure/vLLM/Ollama)
+- **ModelProvider**: protocolo único para LLMs com síntese ancorada nas fontes e citações [F#]
+
+### Growth Engines
+
+- **Research Engine**: QUESTION → SOURCES → SYNTHESIS → INSIGHTS (nunca inventa fontes)
+- **Content Engine**: 18 tipos, scoring explicável, pipeline IDEA → PUBLISHED com versionamento
+- **SEO Engine**: auditoria determinística (broken links, órfãos, thin content, gaps, cannibalização)
+- **Opportunity Engine**: coleta + scoring ICE/RICE com breakdown explicável
+- **Experiment Engine**: lifecycle PROPOSED → RUNNING → COMPLETED com decisão ADOPT/REJECT/ITERATE
+
+### Distribution & Outreach
+
+- **Blog Publisher**: conteúdo aprovado → markdown com front matter, aprovação humana obrigatória
+- **Social Scheduler**: posts por canal (X/LinkedIn/Bluesky/Instagram) com adapters reais de API
+- **Social Worker L3**: executa apenas posts pré-aprovados por humano
+- **Email Nurture**: sequences com triggers, enrollments, suppression list (no cold-spam)
+
+### CRM & Leads
+
+- **Lead Intelligence**: lifecycle CAPTURED → WON/LOST, scoring explicável, qualificação BANT/MEDDIC
+- **CRM Pipeline**: deals com stages configuráveis, atividades, pipeline summary ponderado
+- **Meeting Scheduling**: lifecycle SCHEDULED → COMPLETED/CANCELLED, analytics
+- **Campaign Orchestration**: lifecycle PLANNED → COMPLETED, linking de conteúdo/social/experiments
+
+### Education & Community
+
+- **Academy**: tracks, courses, modules, lessons, labs, certifications, progress tracking
+- **Community**: members multi-platform, threads, replies, analytics
+
+### Observability
+
+- **Analytics Engine**: ~22 métricas determinísticas + insights com evidência
+- **Control Center**: dashboard HTML estático (dark theme, zero JS) com KPIs e health
+- **RAG Debugger**: debug de queries com scoring e index stats
+- **Run Debugger**: timeline de eventos por run
+- **Self-Audit**: health checks automáticos com recomendações
 
 ## O que é (e o que não é)
 
 | GEOS é | GEOS não é |
 |---|---|
-| Sistema operacional de marketing/growth | Content farm ou gerador de posts |
-| Motor de experimentação de crescimento | Spam engine / cold-outreach em massa |
-| Sistema de conhecimento + RAG | Chatbot ou coleção de prompts |
-| Framework de agentes especializados | Swarm não controlado ou god agent |
+| Framework de agentes de IA para growth | Content farm ou gerador de posts |
+| Sistema operacional de marketing/growth | Spam engine / cold-outreach em massa |
+| Motor de experimentação de crescimento | Chatbot ou coleção de prompts |
+| Sistema de conhecimento + RAG | Swarm não controlado ou god agent |
 | Camada de orquestração de CRM/leads | Substituição de stack existente |
-
-## Por que GEOS
-
-- **Local-first**: SQLite + bus em processo. Nada de Kafka/Redis/Postgres obrigatório
-  para o primeiro workflow.
-- **Determinístico primeiro, LLM por último**: cron, FTS, scoring, dedup e detecção
-  são código puro.
-- **Aprovação humana** para ações externas (publish, social, newsletter, meetings…).
-- **BROWNFIELD não-destrutivo**: instala em projetos existentes sem modificar o código
-  do produto; reusa infra (banco, fila, CI) via adapters.
-- **Spec-Driven Development**: nada é documentado como existente sem estar implementado.
 
 ## Quickstart
 
@@ -113,6 +142,17 @@ geos runs list
 geos doctor
 ```
 
+### Integrando em projeto existente (brownfield)
+
+```bash
+cd seu-projeto
+geos init --mode brownfield       # não modifica código do produto
+geos db migrate
+geos knowledge ingest docs --source docs
+geos analytics collect
+geos cc audit                     # health check do workspace
+```
+
 Sem `pip install`? `python -m geos.cli ...` funciona igual.
 
 ## Repositório
@@ -121,7 +161,7 @@ Sem `pip install`? `python -m geos.cli ...` funciona igual.
 geos/
 ├── geos/          # pacote Python (core, storage, intelligence, discovery, cli)
 ├── tests/         # unittest (zero deps além de PyYAML) — 333 testes
-├── docs/geos/     # auditoria, contexto, visão, ADRs, roadmap, SPEC-001..025, 034, 035, 038, 039, 103, 106
+├── docs/geos/     # auditoria, contexto, visão, ADRs, roadmap, SPECs
 ├── workflows/     # workflows declarativos de exemplo
 ├── examples/      # quickstart + config + docs de exemplo
 └── .github/       # CI (Linux + Windows, Python 3.11–3.13)
